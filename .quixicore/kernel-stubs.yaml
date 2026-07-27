@@ -1,0 +1,1777 @@
+---
+schema_version: 0.2
+backend: cuda
+backend_revision: d959679b0163
+inventory_date: '2026-07-27'
+abi: kernel_call_v1
+generated_from:
+- QuixiCore/registry/operations.yaml
+- ".quixicore/kernels.yaml"
+canonical_operation_count: 303
+stub_count: 303
+stubs:
+  accumulate:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - accumulate
+  act_quant_int8:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - act_quant_int8
+  adamw:
+    family: optimizers
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - adamw
+  adamw_masked:
+    family: optimizers
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - adamw_masked
+  adaptive_norm_modulation:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  adaptive_norm_modulation_qkv:
+    family: diffusion
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  adaptive_rms_norm_modulation:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  adaptive_rms_norm_modulation_qkv:
+    family: diffusion
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  add_id:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - add_id
+  add_relative_position_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - add_relative_position_2d
+  add_scalar:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - add_scalar
+  all_gather_gemm:
+    family: collectives
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  all_reduce_rms_norm:
+    family: collectives
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  arange:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - arange
+  argmax:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - argmax
+  argsort:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - argsort
+  attention:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - attention
+    - attn_fwd_sg_d256
+    - gqa
+    - gqa_causal
+  attention_backward:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gqa_backward
+    - gqa_causal_backward
+  attention_gate_residual:
+    family: attention
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  attention_with_lse:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - attention_with_lse
+  audio_causal_depthwise_conv1d:
+    family: audio
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - audio_causal_depthwise_conv1d
+  audio_conv1d:
+    family: audio
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - audio_conv1d
+  audio_conv1d_direct:
+    family: audio
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - audio_conv1d_direct
+  audio_depthwise_conv1d:
+    family: audio
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - audio_depthwise_conv1d
+  audio_relative_attention:
+    family: audio
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - audio_relative_attention
+  audio_resample:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  avg_pool2d_tokens:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - avg_pool2d_tokens
+  base_q_dequant:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_dequant
+  base_q_embedding:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_embedding
+  base_q_gemm:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_gemm
+  base_q_gemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_gemv
+  base_q_lm_head_argmax:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_lm_head_argmax
+  base_q_moe_gemm:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_moe_gemm
+  base_q_moe_swiglu:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_moe_swiglu
+  base_q_qkv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_gemv_qkv
+    - base_q_qkv
+  base_q_swiglu:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - base_q_gemv_swiglu
+    - base_q_swiglu
+  based_attention:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - based
+  biased_attention:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - biased_attention
+  broadcast:
+    family: collectives
+    kind: operation
+    reason: capability-gated family
+    source_ids:
+    - broadcast
+  calibration_absmax:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - calibration_absmax
+  causal_conv3d_cache_update:
+    family: convolution
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  causal_conv_gate_residual:
+    family: audio
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  clamp:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - clamp
+  classifier_free_guidance_combine:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  classifier_free_guidance_scheduler_step:
+    family: diffusion
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  col2im_1d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - col2im_1d
+  col2im_2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - col2im_2d
+  complex_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - complex_gemm
+  concat:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - concat
+  conv2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - conv2d
+  conv3d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - conv3d
+  conv_transpose_1d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - conv_transpose_1d
+  conv_transpose_2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - conv_transpose_2d
+  conv_transpose_overlap_add:
+    family: audio
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  cosine:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - cosine
+  count_equal:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - count_equal
+  cross_attention:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - cross_attention
+  cross_entropy:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - cross_entropy
+  cross_entropy_backward:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - cross_entropy_backward
+  ctc_decode:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  cumulative_sum:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - cumulative_sum
+  decode_cache_attention:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - attn_decode_bh
+    - decode_cache_attention
+  decode_linear:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - decode_linear
+  decode_linear_q8:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - decode_linear_q8
+  decode_linear_residual:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - decode_linear_residual
+  decode_swiglu:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - decode_swiglu
+    - decode_swiglu_dense
+    - decode_swiglu_packed
+  deformable_attention:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  dense_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - bf16fp32_matmul
+    - dense_gemm
+    - gemm_staged
+    - matmul_custom
+  dense_gemm_ex:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - scaled_matmul
+  depthwise_conv2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - depthwise_conv2d
+  dequant_gather:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - dequant_gather
+  deterministic_noise:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  diag_embed:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - diag_embed
+  diag_mask:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - diag_mask
+  diffusion_scheduler_step:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  divide:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - divide
+  down_projection_residual:
+    family: matmul
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  downsample_3d:
+    family: convolution
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  downsample_conv2d:
+    family: convolution
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  dropout:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - dropout
+  dsv4_hc_comb:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - dsv4_hc_comb
+  dsv4_hc_post:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - dsv4_hc_post
+  dsv4_hc_pre:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - dsv4_hc_pre
+  edge_mlp_256x7:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - edge_mlp_256x7
+  embedding_backward:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - embedding_backward
+  embedding_lookup:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - embedding_lookup
+  embedding_lookup_types:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - embedding_lookup_types
+  extract_patches_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - extract_patches_2d
+  extract_patches_3d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - extract_patches_3d
+  factorized_position_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - factorized_position_2d
+  fake_quant_float8:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fake_quant_float8
+  fake_quant_int8:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fake_quant_int8
+  fft_convolution:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fftconv
+  fill:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fill
+  flow_euler_step:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  flow_step_action_clamp_denormalize:
+    family: vla_world_models
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  fp8_gemm:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fp8_gemm
+  fp8_scaled_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - fp8fp32_matmul
+  gate_up_projection_swiglu:
+    family: matmul
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  gated_linear_attention:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gated_linear_attention
+  gdn_gate_beta:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gdn_gate_beta
+  gdn_gated_rmsnorm:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gdn_gated_rmsnorm
+  gdn_qkv_prepare:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gdn_qkv_prepare
+  gdn_recurrence:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gdn_recur
+    - gdn_recurrence
+  gdn_short_conv:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gdn_short_conv
+  geglu_projection:
+    family: matmul
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  gelu:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gelu
+  gelu_backward:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gelu_backward
+  gemm_gate_residual:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gemm_gate_residual
+  get_relative_position:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - get_relative_position
+  gguf_gemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gguf_gemv
+  glu:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - glu
+  grammar_mask:
+    family: sampling
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  grid_sample:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  group_norm:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - group_norm
+  group_norm_silu:
+    family: convolution
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  grouped_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - grouped_gemm
+  hadamard:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - hadamard
+  hedgehog_attention:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - hedgehog
+  im2col_2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - im2col_2d
+  im2col_3d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - im2col_3d
+  indexer_k_gather:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - indexer_k_gather
+  int8_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - int8_matmul
+    - qgemm_int8
+  interpolate_position_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - interpolate_position_2d
+  istft:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  joint_multimodal_attention:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  kd_ce_fused_bwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_ce_fused_bwd
+  kd_ce_fused_fwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_ce_fused_fwd
+  kd_kl_dense_bwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_kl_dense_bwd
+  kd_kl_dense_fwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_kl_dense_fwd
+  kd_kl_topk_bwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_kl_topk_bwd
+  kd_kl_topk_fwd:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kd_kl_topk_fwd
+  kv_cache_compact:
+    family: serving
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  kv_cache_copy_blocks_q8_0:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_copy_blocks_q8_0
+  kv_cache_gather:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_gather
+  kv_cache_gather_bitnet_kv3:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_gather_bitnet_kv3
+  kv_cache_gather_q8_0:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_gather_q8_0
+  kv_cache_offload:
+    family: serving
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  kv_cache_scatter:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_scatter
+  kv_cache_scatter_bitnet_kv3:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_scatter_bitnet_kv3
+  kv_cache_scatter_q8_0:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - kv_cache_scatter_q8_0
+  l2_normalize:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - l2_normalize
+  layer_norm:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - layernorm
+  leaky_relu:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - leaky_relu
+  linear_attention:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - linear_attn
+  linear_attention_unnormalized:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - linear_attention_unnormalized
+  linear_epilogue:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - decode_linear_epilogue
+    - decode_linear_epilogue_dense
+    - decode_linear_epilogue_packed
+  lm_head_beam_advance:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lm_head_beam_advance
+  lm_head_candidates:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lm_head_candidates
+  lm_head_masked:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lm_head_masked
+  log_mel_spectrogram:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  logarithm:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - logarithm
+  logits_bias_penalties_top_k_top_p_sample:
+    family: sampling
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  logits_softcap:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - logits_softcap
+  lora_apply:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lora_apply
+  lora_apply_direct_f16:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lora_apply_direct_f16
+  lowbit_gemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemv_int4
+  mamba2_backward:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - mamba2_backward
+  masked_mean_pool_rms_l2:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - masked_mean_pool_rms_l2
+  mean_pool_rms_l2:
+    family: pooling
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - mean_pool_rms_l2
+    - pool_mean_rms_l2
+  mixed_prefill_decode_attention:
+    family: attention
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  moe_all_to_all_dispatch:
+    family: collectives
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  moe_finalize_backward:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_finalize_backward
+  moe_gather_backward:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_gather_backward
+  moe_grouped_gemm_backward_input:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_grouped_gemm_backward_input
+  moe_grouped_gemm_backward_weight:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_grouped_gemm_backward_weight
+  moe_grouped_gemm_swiglu:
+    family: moe
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  moe_grouped_qgemm:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_grouped_qgemm
+  moe_grouped_qswiglu:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_grouped_qswiglu
+  moe_route_grouped:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_route_grouped
+  moe_route_top_k_prefix_sum_permute:
+    family: moe
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  moe_route_topk:
+    family: moe
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - moe_route_topk
+  moe_unpermute_weighted_reduce:
+    family: moe
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  mrope:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - mrope
+  multi_codebook_sample:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  multimodal_rope_nd:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  multimodal_stream_deinterleave:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  multimodal_stream_interleave:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  multiply:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - multiply
+  multistream_logits_codebook_sample:
+    family: audio
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  mxfp4_gemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - mxfp4_gemv
+  mxfp8_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - mxfp8_matmul
+  non_max_suppression:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  norm_quant:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - norm_quant
+  nvfp4_gemm:
+    family: matmul
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - nvfp4_matmul
+  nvfp4_gemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - nvfp4_gemv
+  outer_product:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - outer_product
+  overlap_add:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  pad_2d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - pad_2d
+  pad_reflect_1d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - pad_reflect_1d
+  paged_attention_advanced:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - paged_attention_advanced
+  paged_attention_bitnet_kv3:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - paged_attention_bitnet_kv3
+  paged_attention_output_projection_residual:
+    family: attention
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  paged_attention_q8_0:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - paged_attention_q8_0
+  paged_attention_turboquant:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - paged_attention_turboquant
+  patch_merge_layer_norm:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - patch_merge_layer_norm
+  patchify_nd:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  patchify_projection_position:
+    family: vision
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  pixel_shuffle:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  pool1d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - pool1d
+  pool2d:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - pool2d
+  pool2d_backward:
+    family: convolution
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - pool2d_backward
+  pool_tokens_by_position:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - pool_tokens_by_position
+  prefix_append_attention:
+    family: attention
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  qgeglu:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgeglu
+  qgemm:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemm
+  qgemm_backward_input:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemm_backward_input
+  qgemm_int:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemm_int
+  qgemm_q4q8:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemm_q4q8
+  qgemv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemv
+  qgemv_qkv:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemv_q4_0_f32_qkv
+  qgemv_up_gate:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemv_q4_0_f32_up_gate
+  qgemv_up_gate_activation:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qgemv_q4_0_f32_up_gate_gelu
+  qk_norm_rope:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qk_norm_rope
+    - qk_norm_rope_kv_f16
+  qk_norm_rope_attention:
+    family: attention
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  qk_norm_rope_positioned:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qk_norm_rope_positioned
+  qkv_proj_fused:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - qkv_proj_fused
+  qkv_projection_qk_norm_rope_kv_append:
+    family: attention
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  quantize_int4_group:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - quantize_int4_group
+  quantized_attention:
+    family: serving
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - quantized_attention
+  quantized_embedding:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - quantized_embedding
+  quantized_embedding_bag:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - quantized_embedding_bag
+  quantized_lm_head_sample:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - lm_head
+  qwen_vision_rope_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - qwen_vision_rope_2d
+  ragged_pack:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  ragged_unpack:
+    family: multimodal
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  reduce_mean:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - reduce_mean
+  reduce_scatter_gemm:
+    family: collectives
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  reduce_sum:
+    family: collectives
+    kind: operation
+    reason: capability-gated family
+    source_ids:
+    - reduce_sum
+  reduce_sum_all:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - reduce_sum_all
+  repeat_2d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - repeat_2d
+  repeat_backward_2d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - repeat_backward_2d
+  residual_rms_norm_quant:
+    family: norms
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  residual_vector_quantize_decode:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  residual_vector_quantize_encode:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  resize_bicubic:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  resize_bilinear:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  resize_normalize_layout_quant:
+    family: vision
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  rms_norm:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rms_norm
+    - rmsnorm
+  rms_norm_backward:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rms_norm_backward
+  rms_norm_residual_next:
+    family: norms
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rms_norm_residual_next
+    - rms_residual_next
+  rnnt_beam_step:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  rnnt_joiner:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  roi_align:
+    family: vision
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  roll_2d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - roll_2d
+  rope:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rope
+    - rotary
+  rope_3d:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  rotary_positioned:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rotary_positioned
+  rvq_distance_argmin_residual_update:
+    family: audio
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  rwkv_wkv6:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rwkv_wkv6
+  rwkv_wkv7:
+    family: linear_attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - rwkv_wkv7
+  sample_categorical:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - sample_categorical
+  scale:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - scale
+  selective_scan:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - selective_scan
+  set_rows:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - set_rows
+  sgd:
+    family: optimizers
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - sgd
+  sigmoid_mul:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - sigmoid_mul
+  sigmoid_mul_backward:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - sigmoid_mul_backward
+  silu:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - silu
+  silu_backward:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - silu_backward
+  sine:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - sine
+  softmax:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - softmax
+  softmax_backward:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - softmax_backward
+  solve_lower_triangular:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - solve_lower_triangular
+  space_to_depth_norm_linear:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - space_to_depth_norm_linear
+  speculative_verify_accept_compact_kv:
+    family: serving
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  square:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - square
+  square_root:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - square_root
+  ssd_chunked_backward:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ssd_chunked_backward
+  ssd_decode:
+    family: ssm
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ssd_decode
+  stft:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  streaming_conv1d_state:
+    family: audio
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  subtract:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - subtract
+  swiglu_oai:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - swiglu_oai
+  temporal_upsample_conv3d:
+    family: convolution
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  tensor_copy:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - tensor_copy
+  tensor_set_4d:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - tensor_set_4d
+  ternary_code_flip_count:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ternary_code_flip_count
+  ternary_pack:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ternary_pack
+  ternary_stats:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ternary_stats
+  ternary_unpack:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - ternary_unpack
+  threshold_topk_indices:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - threshold_topk_indices
+  timestep_embedding:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - timestep_embedding
+  top_k_renorm:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - top_k_renorm
+  top_k_sample:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - top_k_sample
+  top_p_renorm:
+    family: sampling
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - top_p_renorm
+  tq2_0_pack:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - tq2_0_pack
+  tq2_0_unpack:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - tq2_0_unpack
+  triangular_fill:
+    family: utils
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - triangular_fill
+  turboquant:
+    family: quantization
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - turboquant
+  unary:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - unary
+  unpatchify_nd:
+    family: diffusion
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  upsample_3d:
+    family: convolution
+    kind: primitive
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  upsample_conv2d:
+    family: convolution
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  upscale_nearest_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - upscale_nearest_2d
+  value_clip:
+    family: activations
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - value_clip
+  vision_patch_projection:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - vision_patch_projection
+  vision_patch_projection_3d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - vision_patch_projection_3d
+  vision_rope_2d:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - vision_rope_2d
+  window_attention:
+    family: attention
+    kind: operation
+    reason: family-only metadata; canonical adapter not wired
+    source_ids:
+    - gqa_swa
+  window_partition:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - window_partition
+  window_rfft_power_mel_log:
+    family: audio
+    kind: fused
+    reason: planned contract; no backend implementation evidence
+    source_ids: []
+  window_unpartition:
+    family: vision
+    kind: operation
+    reason: no family claim
+    source_ids:
+    - window_unpartition
