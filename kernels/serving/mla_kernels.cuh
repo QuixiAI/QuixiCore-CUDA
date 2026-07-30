@@ -243,7 +243,9 @@ __global__ void mla_decode_fp8(const bf16* q, const uint8_t* data_cache, const u
 
     float qv[VPL], acc[VPL];
     #pragma unroll
-    for (int i = 0; i < VPL; i++) { qv[i] = float(q[q_base + lane + 32 * i]); acc[i] = 0.0f; }
+    for (int i = 0; i < VPL; i++) qv[i] = float(q[q_base + lane + 32 * i]);
+    #pragma unroll
+    for (int i = 0; i < VPL; i++) acc[i] = 0.0f;
     float m = -3.4028234663852886e38f, l = 0.0f;
 
     for (int t = 0; t < context_len; t++) {
@@ -341,7 +343,18 @@ __global__ void mla_decode_partition(const bf16* q, const bf16* kv_cache,
 // partitions the token range, sparse partitions the INDEX LIST) and emits v2
 // partials for paged_attention_reduce<bf16,512>. <false,false> is the plain
 // dense decode (mla_decode_fp8 kept above as the validated original). ----
-template <bool SPARSE, bool PART>
+// Geometry is templated so one kernel serves several MLA shapes:
+//   QW   score width  = q width = elements per cache slot
+//   VW   value width  = output width (the leading VW dims are the value; any
+//        trailing QW-VW dims contribute to the score only, e.g. a rope tail)
+//   NFP8 leading elements stored as fp8; the remaining QW-NFP8 are bf16
+//   SMODE 0 = per-64 e8 exponent byte from scale_cache (original)
+//         1 = single per-tensor scale passed in kv_scale (vLLM fp8 MLA cache)
+// Defaults reproduce the original 512/512/448/e8 instantiation exactly.
+//   DeepSeek-style : <SPARSE, PART>                       448 fp8 + 64 bf16 rope
+//   GLM-5.2-Vision : <SPARSE, PART, 576, 512, 576, 1>     576 fp8, value = 512
+template <bool SPARSE, bool PART, int QW = 512, int VW = 512, int NFP8 = 448,
+          int SMODE = 0>
 __global__ void mla_decode_fp8_v(const bf16* q, const uint8_t* data_cache,
                                  const uint8_t* scale_cache, const int* block_table,
                                  const int* context_lens,                  // dense
@@ -349,38 +362,54 @@ __global__ void mla_decode_fp8_v(const bf16* q, const uint8_t* data_cache,
                                  bf16* out,                                // !PART
                                  float* tmp_out, float* max_logits, float* exp_sums,  // PART
                                  int block_size, int bt_stride, float scale, int num_heads,
-                                 int num_partitions, int partition_size) {
-    constexpr int LATENT = 512, NOPE = 448, VPL = LATENT / 32;
+                                 int num_partitions, int partition_size,
+                                 float kv_scale = 1.0f) {
+    constexpr int NOPE = NFP8, VPL = VW / 32, QPL = QW / 32;
+    constexpr int SLOT_BYTES = NFP8 + 2 * (QW - NFP8);
+    static_assert(QW % 32 == 0 && VW % 32 == 0 && VW <= QW, "bad MLA geometry");
     constexpr float MLA_NEG_INF = -3.4028234663852886e38f;
     const int head = blockIdx.x, batch = blockIdx.y, lane = threadIdx.x;
     const int part = PART ? blockIdx.z : 0;
     const int len = SPARSE ? topk_length[batch] : context_lens[batch];
     const int j_beg = PART ? part * partition_size : 0;
     const int j_end = PART ? min(len, j_beg + partition_size) : len;
-    const int64_t q_base = (int64_t(batch) * num_heads + head) * LATENT;
+    const int64_t q_base = (int64_t(batch) * num_heads + head) * QW;
 
-    float qv[VPL], acc[VPL];
+    float qv[QPL], acc[VPL];
     #pragma unroll
-    for (int i = 0; i < VPL; i++) { qv[i] = float(q[q_base + lane + 32 * i]); acc[i] = 0.0f; }
+    for (int i = 0; i < QPL; i++) qv[i] = float(q[q_base + lane + 32 * i]);
+    #pragma unroll
+    for (int i = 0; i < VPL; i++) acc[i] = 0.0f;
     float m = MLA_NEG_INF, l = 0.0f;
 
     for (int j = j_beg; j < j_end; j++) {
         const int t = SPARSE ? indices[batch * max_topk + j] : j;
         if (SPARSE && t < 0) continue;
         const int col = t / block_size, slot = t - col * block_size;
+        // A sparse index list is caller-supplied and can be ragged or stale
+        // (padding, a profiling pass, a request shorter than max_topk). Guard the
+        // block-table read as well as its contents; without this an index past
+        // the request's table walks off the end and then dereferences the cache
+        // with a garbage block id.
+        if (col < 0 || col >= bt_stride) continue;
         const int block = block_table[batch * bt_stride + col];
         if (block < 0) continue;
         const int64_t dslot = int64_t(block) * block_size + slot;
-        const int64_t dbase = dslot * 576, sbase = dslot * 8;
+        const int64_t dbase = dslot * SLOT_BYTES, sbase = dslot * (NFP8 / 64);
         const bf16* rope = reinterpret_cast<const bf16*>(data_cache + dbase + NOPE);
 
-        float lat[VPL], partial = 0.0f;
+        float lat[QPL], partial = 0.0f;
         #pragma unroll
-        for (int i = 0; i < VPL; i++) {
+        for (int i = 0; i < QPL; i++) {
             const int d = lane + 32 * i;
             if (d < NOPE) {
-                const int e = int(scale_cache[sbase + d / 64]);
-                lat[i] = tmq::e4m3_decode(data_cache[dbase + d]) * exp2f(float(e - 127));
+                const float dq = tmq::e4m3_decode(data_cache[dbase + d]);
+                if (SMODE == 0) {
+                    const int e = int(scale_cache[sbase + d / 64]);
+                    lat[i] = dq * exp2f(float(e - 127));
+                } else {
+                    lat[i] = dq * kv_scale;
+                }
             } else {
                 lat[i] = float(rope[d - NOPE]);
             }
@@ -397,7 +426,7 @@ __global__ void mla_decode_fp8_v(const bf16* q, const uint8_t* data_cache,
     }
     if (PART) {
         const int64_t stat = (int64_t(batch) * num_heads + head) * num_partitions + part;
-        const int64_t ob = stat * LATENT;
+        const int64_t ob = stat * VW;
         #pragma unroll
         for (int i = 0; i < VPL; i++)
             tmp_out[ob + lane + 32 * i] = (l == 0.0f) ? 0.0f : acc[i] / l;
@@ -406,7 +435,7 @@ __global__ void mla_decode_fp8_v(const bf16* q, const uint8_t* data_cache,
             exp_sums[stat] = l;
         }
     } else {
-        const int64_t out_base = (int64_t(batch) * num_heads + head) * LATENT;
+        const int64_t out_base = (int64_t(batch) * num_heads + head) * VW;
         #pragma unroll
         for (int i = 0; i < VPL; i++)
             out[out_base + lane + 32 * i] = (l == 0.0f) ? bf16(0.0f) : bf16(acc[i] / l);

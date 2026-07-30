@@ -374,6 +374,46 @@ static torch::Tensor py_mla_decode_fp8_partition(torch::Tensor q, torch::Tensor 
         tmp.data_ptr<float>(), ml.data_ptr<float>(), es.data_ptr<float>(), bpm(out), H, P);
     return out;
 }
+// GLM-5.2-Vision, bf16 cache. NFP8=0 means every element is read as bf16, so a
+// slot is 576 bf16 = 1152 B. Ampere (sm80) has no native fp8e4nv, so vLLM cannot
+// store an fp8 KV cache there -- this is the geometry that actually runs on A100.
+static torch::Tensor py_mla_decode_bf16_sparse_glm(torch::Tensor q, torch::Tensor kv,
+        torch::Tensor bt, torch::Tensor indices, torch::Tensor topk_length,
+        int64_t block_size, double scale) {
+    CK(q); CK(kv); CK(bt); CK(indices); CK(topk_length);
+    const int B = q.size(0), H = q.size(1);
+    TORCH_CHECK(q.size(2) == 576, "GLM MLA expects q width 576, got ", q.size(2));
+    const int max_topk = indices.size(1);
+    auto out = torch::empty({B, H, 512}, q.options());
+    mla_decode_fp8_v<true, false, 576, 512, 0, 0><<<dim3(H, B), 32, 0, stream()>>>(
+        bp(q), reinterpret_cast<const uint8_t*>(kv.data_ptr()), nullptr,
+        bt.data_ptr<int>(), nullptr, indices.data_ptr<int>(),
+        topk_length.data_ptr<int>(), max_topk, bpm(out), nullptr, nullptr, nullptr,
+        int(block_size), int(bt.size(1)), float(scale), H, 1, 0, 1.0f);
+    return out;
+}
+
+// GLM-5.2-Vision geometry: q/cache slot are 576 fp8 elements, the value is the
+// leading 512, and the cache carries one per-tensor kv_scale (vLLM's fp8 MLA
+// layout) rather than per-64 e8 exponents. `indices` are request-local logical
+// token positions resolved through `bt`, which is exactly what vLLM's
+// topk_indices_buffer already holds -- no global-index conversion needed.
+static torch::Tensor py_mla_decode_fp8_sparse_glm(torch::Tensor q, torch::Tensor data,
+        torch::Tensor bt, torch::Tensor indices, torch::Tensor topk_length,
+        int64_t block_size, double scale, double kv_scale) {
+    CK(q); CK(data); CK(bt); CK(indices); CK(topk_length);
+    const int B = q.size(0), H = q.size(1);
+    TORCH_CHECK(q.size(2) == 576, "GLM MLA expects q width 576, got ", q.size(2));
+    const int max_topk = indices.size(1);
+    auto out = torch::empty({B, H, 512}, q.options());
+    mla_decode_fp8_v<true, false, 576, 512, 576, 1><<<dim3(H, B), 32, 0, stream()>>>(
+        bp(q), data.data_ptr<uint8_t>(), nullptr, bt.data_ptr<int>(), nullptr,
+        indices.data_ptr<int>(), topk_length.data_ptr<int>(), max_topk, bpm(out),
+        nullptr, nullptr, nullptr, int(block_size), int(bt.size(1)), float(scale), H, 1, 0,
+        float(kv_scale));
+    return out;
+}
+
 static torch::Tensor py_mla_decode_fp8_sparse(torch::Tensor q, torch::Tensor data,
         torch::Tensor scl, torch::Tensor bt, torch::Tensor indices, torch::Tensor topk_length,
         int64_t block_size, double scale, int64_t partition_size) {
@@ -439,6 +479,13 @@ void init_serving(py::module_& m) {
           py::arg("norm_weight") = py::none());
     m.def("mla_decode_partition", &py_mla_decode_partition);
     m.def("mla_decode_fp8_partition", &py_mla_decode_fp8_partition);
+    m.def("mla_decode_bf16_sparse_glm", &py_mla_decode_bf16_sparse_glm, py::arg("q"),
+          py::arg("kv"), py::arg("block_table"), py::arg("indices"),
+          py::arg("topk_length"), py::arg("block_size"), py::arg("scale"));
+    m.def("mla_decode_fp8_sparse_glm", &py_mla_decode_fp8_sparse_glm, py::arg("q"),
+          py::arg("data"), py::arg("block_table"), py::arg("indices"),
+          py::arg("topk_length"), py::arg("block_size"), py::arg("scale"),
+          py::arg("kv_scale"));
     m.def("mla_decode_fp8_sparse", &py_mla_decode_fp8_sparse, py::arg("q"), py::arg("data"),
           py::arg("scale_cache"), py::arg("block_table"), py::arg("indices"),
           py::arg("topk_length"), py::arg("block_size"), py::arg("scale"),
