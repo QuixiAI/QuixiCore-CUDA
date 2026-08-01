@@ -165,3 +165,15 @@ Campaign log: iter6 KEEP (w1 crossover 16); next [k] kernel-count floor.
 - Remaining headroom filed: quantize_q8_1 562x/1.42 ms (quant-once
   restructuring), router-adjacent copy_ 76x, AR 1.30 ms.
 Campaign log: iter7 KEEP (kernel floor -21%); fresh matrix for README next.
+
+### iter8: dequant+cuBLAS route for wide q8_0 — KEEP, default on (2026-08-01)
+- Crossover measured per shape: cuBLAS wins from rows>=96 (N<8192) / >=160
+  (wide incl. lm_head); gate at those bounds, hatches VLLM_GGUF_CUBLAS=0 and
+  _MIN_BATCH. Per-shape persistent scratch (~230 MB/GPU dense + 476 MB vocab),
+  ggml_dequantize_into (no-alloc no-fill, USE_ROCM-gated), graph-safe.
+- Correctness: rel L2 2.4-2.9e-3 -- about HALF of mmq_v2's 5.6e-3.
+- A/B mean-of-3 natural: bs=32 270.2->299.0 (+10.7%, beats 297 target),
+  bs=64 328.3->360.4 (+9.8%). Fixed-length guards: bs=1 +2.7%, bs=8 -1.1%
+  (natural-stop bs=8 dip shown to be content/stop-length artifact).
+Campaign log: iter8 KEEP; TP4 now beats reference at bs=8 and bs=32; fresh
+matrix next; remaining gaps bs=1/4/16/64.
