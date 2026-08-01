@@ -140,3 +140,15 @@ full matrix rerun for README in flight.
   stop single runs at 32/64 carry +/-8-10%; treat README high-batch cells as
   mean-of-3 going forward.
 Campaign log: iter5 stability CLOSED (variance, no mmvq regression); next [j].
+
+### iter6: MoE at verify width — KEEP, config-only (2026-08-01)
+- w1 vec->MMQ crossover 64->16 on CUDA (fused_moe.py one-liner): -10-12%
+  ms/decode-step at bs=8 (acceptance-corrected metric, +/-0.5%); bs=1 and
+  bs=32 paths unchanged. Kernel-level: MMQ wins from 32 tokens (604 vs 720us).
+- LOSERS w/ numbers: expert-sorted vec 0.95-1.03x (L2 already dedups; vec is
+  per-row compute-bound); rows_per_block retune (heuristic already optimal);
+  MMQ at bs=1 -2.7%. Correctness: vec==MMQ rel L2 to 5 decimals, K=256 safe.
+- NEGATIVE: bs=1 MoE at practical floor (~40.1 ms/step, ~61 tok/s at typical
+  acceptance) -- 82 target needs [k] small-kernel floor or acceptance gains,
+  not MoE scheduling.
+Campaign log: iter6 KEEP (w1 crossover 16); next [k] kernel-count floor.
