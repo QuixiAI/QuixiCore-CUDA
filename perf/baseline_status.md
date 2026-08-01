@@ -246,3 +246,14 @@ where noted):
 - `parallel/` kernels additionally need a multi-GPU fabric with multicast
   support; 8x 3090 (PCIe/pairwise NVLink) cannot validate them even if the
   arch gap were closed.
+
+## A100 end-to-end matrix — 2026-08-01, post vectorized-MLA (agg tok/s)
+Method: real varied prompts, temp 0, natural stops, tokens/drain-time,
+max_num_seqs 64, fp8 KV, DSpark k=3 draft-TP1, CUDA graphs, no Triton.
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x A100 TP4 | 47.8 | 94.5 | 147.6 | 165.8 | 277.2 | 312.3 |
+| 8x A100 TP8 | 57.9 | 125.2 | 214.2 | 264.4 | 418.0 | 514.7 |
+| 2x MI300X (ref) | 82 | 141 | 176 | 260 | 297 | 408 |
+TP8 beats the 2x MI300X reference at 8/16/32/64. TP4 bs=16 dent (165.8,
+barely above bs=8) flagged as a scheduling anomaly.

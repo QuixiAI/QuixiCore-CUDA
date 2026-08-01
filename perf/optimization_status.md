@@ -66,3 +66,29 @@ Status: baselined, experiments pending or partially complete.
   per-kernel tables here?
 - Should `perf/bench_kernels.py` grow a single normalized JSON schema for all
   standalone CUDA harnesses?
+
+## A100-vs-MI300X campaign
+
+Goal: 4x A100 TP4 beats 2x MI300X (82/141/176/260/297/408 aggregate tok/s at
+1/4/8/16/32/64 conns; real prompts, temp 0, natural stops, tokens/drain-time).
+
+### mla_decode_fp8_v: vectorized all-fp8 row loads (2026-08-01)
+
+- Hypothesis: 6.75 us per serial iteration measured at BOTH ctx 20 (135 us/call,
+  tlen 20) and ctx 1300 (1.73 ms/call, 256-iteration partitions) = the inner
+  loop's QPL=18 rounds of one-byte-per-lane loads, each an uncoalesced 32 B
+  transaction at full latency. MLA was 74% of GPU busy at ctx 1300.
+- Change: NFP8==QW slots (GLM geometry) read 4 bytes/lane/round -> VW/128
+  coalesced 128 B rounds + 2-byte tail rounds (rope, score-only); q loads uint2;
+  float4/uint2 epilogue stores to the unchanged canonical layout (reduce kernel
+  untouched). Scalar path kept for mixed-layout instantiations.
+- Correctness: fp64 harness, all 3 geometries PASS (GLM fp8 rel 2.9e-3).
+- Measured (bs=1 TP4 no-spec, ms/token at gen len 64/128/256/512):
+  44.2/57.6/85.4/110.2 -> 27.2/29.3/34.7/39.6 = 1.63x/1.97x/2.46x/2.78x.
+- Verdict: KEEP. Matrix delta (TP4 agg 1/4/8/16/32/64):
+  23.4/57.8/82.7/105.0/185.9/216.9 -> 47.8/94.5/147.6/165.8/277.2/312.3
+  (up to 2.04x); TP8 now beats the 2x MI300X reference at 8/16/32/64 conns.
+- Open follow-ups filed: per-iteration idx/block-table prefetch (dependent-load
+  chain still serial), 2 warps/block occupancy experiment.
+
+Campaign log: 2026-08-01 iter1 vectorized MLA loads KEPT; matrix jumped up to 2x; new anomaly filed: TP4 bs=16 dent (165.8 vs 147.6@8 / 277.2@32).
