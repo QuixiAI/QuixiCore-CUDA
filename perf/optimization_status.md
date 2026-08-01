@@ -114,3 +114,22 @@ Campaign log: 2026-08-01 iter1 vectorized MLA loads KEPT; matrix jumped up to 2x
   Aux-hidden-state tap layers (2,20,39,58,75) reduce explicitly first.
 Campaign log: 2026-08-01 iter3 AR+norm fusion LOSER (noise-level); flag-gated
 code committed; next: [f] DSpark draft overhead at bs=1.
+
+### Split-K load balance + verify-width GEMV tile: KEEP (2026-08-01, iter 4)
+
+- All three prior hypotheses wrong (draft IS graph-captured incl. Markov loop;
+  mhc fallbacks not in path; eager pre/post 0.87 ms). Real cost: target verify
+  at 4 tokens, dominated by (1) mla_decode_fp8_v split-K using FIXED partition
+  spans -- ctx<256 ran entirely in partition 0, 16 warps on 108 SMs, and the
+  0.44 ms/ctx-token step growth; now spans are ceil(len/P) per request,
+  device-side, graph-safe: standalone 2.4-6.1x at len 32-512, identical at
+  2048; (2) mmvq rows_per_block 2->4 for ncols_dst==4 (CUDA-only): dense GEMV
+  step cost -13%.
+- Correctness: fp64 harness extended w/ balanced-partition case, all PASS
+  (<=2.9e-3); q8_0 GEMV <0.008 maxrel across 7 shapes; acceptance 2.6-2.7.
+- A/B bs=1 natural 44.6 -> 63.8 (+43%), fixed-128 +23%, bs=32 -0.6% (band).
+  Per-step MLA 9.6-19.1 ms -> 0.6-0.9 ms; profiled step 48.1 -> 33.9 ms.
+- Remaining headroom filed: MoE vec +4.7 ms at verify width (expert-grouped
+  batching), ~12.5 ms small-kernel latency floor in the 4300-kernel graph.
+Campaign log: 2026-08-01 iter4 split-K balance + GEMV tile KEPT (+43% bs=1);
+full matrix rerun for README in flight.
