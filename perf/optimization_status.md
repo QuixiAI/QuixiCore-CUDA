@@ -133,3 +133,10 @@ code committed; next: [f] DSpark draft overhead at bs=1.
   batching), ~12.5 ms small-kernel latency floor in the 4300-kernel graph.
 Campaign log: 2026-08-01 iter4 split-K balance + GEMV tile KEPT (+43% bs=1);
 full matrix rerun for README in flight.
+
+### iter5: high-batch stability (2026-08-01) — CLOSED, no regression
+- TP4 3x repeats: bs=32 232/252/278 (mean 254), bs=64 304/329/285 (mean 306).
+  bs=64 mean matches pre-iter4 (312); matrix3's 264 was a low draw. Natural-
+  stop single runs at 32/64 carry +/-8-10%; treat README high-batch cells as
+  mean-of-3 going forward.
+Campaign log: iter5 stability CLOSED (variance, no mmvq regression); next [j].
