@@ -257,3 +257,12 @@ max_num_seqs 64, fp8 KV, DSpark k=3 draft-TP1, CUDA graphs, no Triton.
 | 2x MI300X (ref) | 82 | 141 | 176 | 260 | 297 | 408 |
 TP8 beats the 2x MI300X reference at 8/16/32/64. TP4 bs=16 dent (165.8,
 barely above bs=8) flagged as a scheduling anomaly.
+
+## A100 matrix — 2026-08-01 post iter4 (balanced split-K + GEMV tile)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 68.2 | 125.3 | 163.1 | 184.1 | 267.5 | 263.6 |
+| 8x TP8 | 68.5 | 140.0 | 248.7 | 302.0 | 368.3 | 548.8 |
+NOTE: high-batch columns swing +/-12-15% between full runs (TP8@32: 418 then
+368; TP4@64: 312 then 264) -- single-run numbers at 32/64 are not stable
+enough to attribute to code changes without repeats. Filed as lead [l].
