@@ -152,3 +152,16 @@ Campaign log: iter5 stability CLOSED (variance, no mmvq regression); next [j].
   acceptance) -- 82 target needs [k] small-kernel floor or acceptance gains,
   not MoE scheduling.
 Campaign log: iter6 KEEP (w1 crossover 16); next [k] kernel-count floor.
+
+### iter7: decode-graph kernel-count reduction — KEEP (2026-08-01)
+- Profile-first top-20 table (4508 kernels/step, small bucket 9.66 ms) drove 5
+  fusions: fill_ removal before GGUF matmuls (-563 launches, CUDA-gated),
+  one-launch sparse_topk_tlen (-156), per-step block-table gather cache (-77),
+  split-q MLA (kills 78 cats/step, BITWISE equal), fused moe_weighted_sum
+  (-75). Result: 3560 kernels/step (-21%), small bucket 7.02 ms.
+- A/B ms/step: bs=1 40.01->37.58 (-6.1%), bs=8 -4.2%, bs=32 322.5->291.9
+  (-9.5%). Natural-stop bs=1 mean-of-4 69.8. Correctness: exact/bitwise where
+  applicable; allocator-poison runs prove fill removals safe; smoke coherent.
+- Remaining headroom filed: quantize_q8_1 562x/1.42 ms (quant-once
+  restructuring), router-adjacent copy_ 76x, AR 1.30 ms.
+Campaign log: iter7 KEEP (kernel floor -21%); fresh matrix for README next.
