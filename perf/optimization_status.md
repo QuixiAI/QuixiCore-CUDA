@@ -219,3 +219,18 @@ acceptance lead) and bs=4/64 (re-measure post-iter10).
   Next levers: [m] quantize_q8_1 quant-once (~1.8ms of 36.6), residual small
   kernels, then diminishing. TurboQuant port (user-directed) in flight.
 Campaign log: iter11 k-sweep closed, k=3 optimal on A100.
+
+### iter12: TurboQuant Triton->CUDA port — LANDED, default unchanged (2026-08-01)
+- Native kernels in kernels/serving/turboquant_kernels.cuh (fused fp8/MSE
+  store, split-KV decode stage1/2, continuation dequant). Bitwise vs Triton:
+  all store presets x D{64,128} x {bf16,fp16}; decode bitwise for
+  turboquant_k8v4 D=64 (serving config); 1-2 bf16 ULP elsewhere (documented
+  reduction-order). Key numeric pins from Triton PTX: cvt.rz fp32->fp8e4b15,
+  div.full, ex2.approx, exact fma fold orders.
+- No-Triton serving run PASSES with TURBOQUANT active (TP4, accept 2.19/step).
+- Draft-KV default STAYS bf16 (fail-closed): A/B lost ~6-7% mean, acceptance-
+  driven (2.24 vs 2.42 bs=1; 4k parity did not hold on this Q2_K stack).
+  Kernel cost at matched acceptance ~1.2% — the port is speed-neutral; TQ's
+  win is KV memory (~22%/token), now available triton-free via opt-in
+  attention_backend=TURBOQUANT + kv_cache_dtype=turboquant_k8v4.
+- SlimServe commit bc10d9144. No matrix refresh needed (defaults unchanged).
