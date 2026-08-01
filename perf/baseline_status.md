@@ -286,3 +286,12 @@ mid-batch cells (4/8/16) now swing +/-15-25% across matrices because iter8's
 logit changes alter generation lengths (drain-efficiency artifact, not speed:
 fixed-length guards within 2%). Mid-batch cells need fixed-workload or
 mean-of-3 treatment before further cross-matrix claims.
+
+## A100 matrix — 2026-08-01 post iter9 (mean-of-3 at 1/32/64)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 65.2 | 130.9 | 203.4 | 259.1 | 310.7 | 352.7 |
+| 8x TP8 | 85.2 | 144.7 | 317.5 | 411.1 | 515.2 | 548.9 |
+TP4 beats the reference at bs=8/32; bs=16 at 99.7% (iter9 ms/step -13%
+corroborates). TP8 beats at every column. TP4 gaps: bs=1 79%, bs=4 93%,
+bs=64 86%.
