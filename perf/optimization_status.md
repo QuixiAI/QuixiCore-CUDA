@@ -209,3 +209,13 @@ Campaign log: iter9 KEEP; fresh matrix for README + stop-check next.
   bitwise where deterministic.
 Campaign log: iter10 KEEP; fresh matrix next; remaining gaps bs=1 (draft/
 acceptance lead) and bs=4/64 (re-measure post-iter10).
+
+### iter11: k-sweep at bs=1 — NO CHANGE, k=3 confirmed (2026-08-01)
+- Hypothesis (verify width nearly free at bs=1) KILLED by measurement:
+  ms/step 36.6/46.3/50.2/53.7 at k=3/4/5/6 (+26% at k=4 alone) vs acceptance
+  ~2.4/2.9/2.8/2.8 — every k>3 loses net (mean tok/s 66/62/~57/53).
+  acc/step is content-noisy (one k=5 rep hit 5.57 on a repetitive stretch).
+- Conclusion: bs=1 gap (66 vs 82) requires step-time cuts, not spec depth.
+  Next levers: [m] quantize_q8_1 quant-once (~1.8ms of 36.6), residual small
+  kernels, then diminishing. TurboQuant port (user-directed) in flight.
+Campaign log: iter11 k-sweep closed, k=3 optimal on A100.
