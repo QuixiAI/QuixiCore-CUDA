@@ -266,3 +266,12 @@ barely above bs=8) flagged as a scheduling anomaly.
 NOTE: high-batch columns swing +/-12-15% between full runs (TP8@32: 418 then
 368; TP4@64: 312 then 264) -- single-run numbers at 32/64 are not stable
 enough to attribute to code changes without repeats. Filed as lead [l].
+
+## A100 matrix — 2026-08-01 post iters 6+7 (mean-of-3 at bs 1/32/64)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 66.2 | 110.9 | 183.3 | 239.5 | 275.1 | 307.7 |
+| 8x TP8 | 84.6 | 166.6 | 276.2 | 315.5 | 464.3 | 562.3 |
+| 2x MI300X ref | 82 | 141 | 176 | 260 | 297 | 408 |
+TP8 beats the reference at EVERY column (incl. bs=1). TP4 beats it at bs=8;
+remaining TP4 gaps: 81%/79%/-/92%/93%/75%.
