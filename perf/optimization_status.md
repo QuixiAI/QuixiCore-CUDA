@@ -92,3 +92,25 @@ Goal: 4x A100 TP4 beats 2x MI300X (82/141/176/260/297/408 aggregate tok/s at
   chain still serial), 2 warps/block occupancy experiment.
 
 Campaign log: 2026-08-01 iter1 vectorized MLA loads KEPT; matrix jumped up to 2x; new anomaly filed: TP4 bs=16 dent (165.8 vs 147.6@8 / 277.2@32).
+
+### TP4 bs=16 "dent": not reproduced (2026-08-01, iter 2)
+
+- Fine sweep bs 12/16/20/24/32, spec and no-spec, same methodology as the
+  matrix: smooth monotonic scaling both ways (spec: 163.9/181.3/223.0/253.2/
+  271.8). The matrix's 165.8@16 was workload-mix variance on a convex curve,
+  not a cliff. Verdict: CLOSED, no defect. Matrix-row single runs carry ~9%
+  column variance at mid batch; only cross-column shape claims need repeats.
+
+### Fused allreduce+residual+RMSNorm: LOSER (2026-08-01, iter 3)
+
+- Correct (residual bitwise vs unfused sequence; norm <= 6.0e-3 rel; ws 4+8)
+  but end-to-end wash: bs1 +0.7% (3 reps), bs8 +0.9%, bs32 -0.7% vs bars of
+  >=5%/>=3%. Root cause of the miss: at decode sizes the one-shot AR's ~20%
+  step share is signal/sync LATENCY, not bandwidth or launches; the fused
+  epilogue removes ~156 norm launches/step (few hundred us under graphs)
+  and none of the latency. Reducing AR cost needs FEWER reduces, not fusion.
+- Kept behind VLLM_FUSED_AR_NORM=1 (default OFF; baseline byte-identical when
+  unset). Covers both per-layer decode ARs at ws 2/4/6/8; not prefill/draft.
+  Aux-hidden-state tap layers (2,20,39,58,75) reduce explicitly first.
+Campaign log: 2026-08-01 iter3 AR+norm fusion LOSER (noise-level); flag-gated
+code committed; next: [f] DSpark draft overhead at bs=1.
