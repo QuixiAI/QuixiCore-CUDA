@@ -234,3 +234,10 @@ Campaign log: iter11 k-sweep closed, k=3 optimal on A100.
   win is KV memory (~22%/token), now available triton-free via opt-in
   attention_backend=TURBOQUANT + kv_cache_dtype=turboquant_k8v4.
 - SlimServe commit bc10d9144. No matrix refresh needed (defaults unchanged).
+
+## Campaign closed (2026-08-01)
+Stopped by decision after iter12. Final matrix (SlimServe README, 63e639171):
+TP4 66/138/204/273/326/392 vs reference 82/141/176/260/297/408 — wins at
+8/16/32 conns, 98%/96% at 4/64, 80% at bs=1; TP8 beats reference everywhere.
+Unstarted leads for any future resume: quantize_q8_1 quant-once (~4-5% bs=1),
+residual small-kernel pass, bs=64 residual (~4%).
