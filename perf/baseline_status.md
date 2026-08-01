@@ -275,3 +275,14 @@ enough to attribute to code changes without repeats. Filed as lead [l].
 | 2x MI300X ref | 82 | 141 | 176 | 260 | 297 | 408 |
 TP8 beats the reference at EVERY column (incl. bs=1). TP4 beats it at bs=8;
 remaining TP4 gaps: 81%/79%/-/92%/93%/75%.
+
+## A100 matrix — 2026-08-01 post iter8 (mean-of-3 at 1/32/64)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 73.1 | 110.0 | 140.6 | 201.7 | 299.6 | 360.7 |
+| 8x TP8 | 79.1 | 141.4 | 286.1 | 258.5 | 494.5 | 552.4 |
+TP4 beats the 297 target at bs=32; bs=64 361 vs 408. CAVEAT: single-run
+mid-batch cells (4/8/16) now swing +/-15-25% across matrices because iter8's
+logit changes alter generation lengths (drain-efficiency artifact, not speed:
+fixed-length guards within 2%). Mid-batch cells need fixed-workload or
+mean-of-3 treatment before further cross-matrix claims.
