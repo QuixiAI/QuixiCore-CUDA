@@ -295,3 +295,10 @@ mean-of-3 treatment before further cross-matrix claims.
 TP4 beats the reference at bs=8/32; bs=16 at 99.7% (iter9 ms/step -13%
 corroborates). TP8 beats at every column. TP4 gaps: bs=1 79%, bs=4 93%,
 bs=64 86%.
+
+## A100 matrix — 2026-08-01 post iter10 (mean-of-3 at 1/32/64)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 65.7 | 138.3 | 204.0 | 272.5 | 325.6 | 391.7 |
+| 8x TP8 | 80.6 | 166.7 | 304.8 | 333.1 | 550.0 | 626.4 |
+TP4 beats reference at 8/16/32; 98% at bs=4, 96% at bs=64, 80% at bs=1.
