@@ -194,3 +194,18 @@ matrix next; remaining gaps bs=1/4/16/64.
 - Follow-ups filed: dense mmq_v2 next at 15.3% (~300 GB/s at 32-64 rows);
   re-sweep MOE_X=8 now that padding is free.
 Campaign log: iter9 KEEP; fresh matrix for README + stop-check next.
+
+### iter10: mmq_v2 floor split-K + MoE Y=64 width gate — KEEP (2026-08-01)
+- [n] Dense mmq_v2's ~300 GB/s was the LAUNCH GRID: ceil nsplit pushed
+  tiles*nsplit past 108 SMs into a straggler wave. Floor semantics = up to
+  30% kernel-level at serving shapes; J selection was already optimal.
+  Hatch VLLM_GGUF_MMQ_V2_CEIL_SPLIT=1.
+- [o] MOE_X=8 loser even padding-free (and X=8/NW=4 numerically INVALID:
+  y-scale loop covers only nwarps columns — caught in sweep). Winner:
+  X=4/NW=4 with MOE_Y 32->64 gated at >=1024 routed rows: w1 -13%, w2
+  -15/-16% at 1024/2048 rows. Hatch VLLM_GGUF_MOE_Q2K_Y64=0. ROCm hard-off.
+- ms/step (6-rep medians): bs=1 -0.9%, bs=4 +0.1%, bs=8 -5.8%, bs=16 -8.1%,
+  bs=32 -5.3%, bs=64 -4.4%. Correctness: relL2 at quant-noise both paths;
+  bitwise where deterministic.
+Campaign log: iter10 KEEP; fresh matrix next; remaining gaps bs=1 (draft/
+acceptance lead) and bs=4/64 (re-measure post-iter10).
