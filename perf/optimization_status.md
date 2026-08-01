@@ -177,3 +177,20 @@ Campaign log: iter7 KEEP (kernel floor -21%); fresh matrix for README next.
   (natural-stop bs=8 dip shown to be content/stop-length artifact).
 Campaign log: iter8 KEEP; TP4 now beats reference at bs=8 and bs=32; fresh
 matrix next; remaining gaps bs=1/4/16/64.
+
+### iter9: MoE MMQ padding skip + w1 crossover 8 — KEEP (2026-08-01)
+- Attribution at bs=8 verify width: MoE Q2_K MMQ = 63.7% of an 85 ms step;
+  draft only 1.5 ms. ncu: DRAM near-perfect (21% peak) but L1TEX 57% -->
+  LSU-bound computing padding: moe_align pads experts to mmq_x=4 blocks, so
+  only 256/656 tile columns were real at 256 routed rows. Candidate list
+  (cuBLAS<96, quantize_q8_1) was wrong again -- profile-first vindicated.
+- Fix: skip_padding template predicate (warp-uniform, k-sweep skip), host
+  gate rows < experts*mmq_x, hatch VLLM_GGUF_MOE_SKIP_PAD=0; BITWISE
+  identical outputs at all widths. Plus w1 vec->MMQ crossover 16->8
+  (MMQ now 331 vs 360 us at 16 tokens).
+- ms/step (median-of-3 fixed-1024): bs=1 -3.2%, bs=4 -9.7%, bs=8 -13.2%,
+  bs=16 -13.0%, bs=32 -1.3% (bit-identical path). Kernel: w1 1.23-1.44x,
+  w2 1.28-1.56x at mid widths.
+- Follow-ups filed: dense mmq_v2 next at 15.3% (~300 GB/s at 32-64 rows);
+  re-sweep MOE_X=8 now that padding is free.
+Campaign log: iter9 KEEP; fresh matrix for README + stop-check next.
