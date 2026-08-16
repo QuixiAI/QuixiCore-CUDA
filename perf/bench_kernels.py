@@ -381,8 +381,22 @@ def main():
     if any(e["config"] == "pytorch" for e in entries):
         env = pytorch_make_env(env)
 
-    meta = dict(date=date, run_id=run_id, argv=sys.argv[1:],
-                env=env_metadata(host_cc, gpu_name, n_gpus))
+    env_meta = env_metadata(host_cc, gpu_name, n_gpus)
+    meta = dict(
+        # schema-1 run.json fields (umbrella docs/benchmarking.md)
+        schema=SCHEMA_VERSION,
+        backend="cuda",
+        repo="QuixiAI/QuixiCore-CUDA",
+        contract="v0.1",
+        git=(env_meta.get("git_commit") or "unknown")
+            + ("-dirty" if env_meta.get("git_dirty") else ""),
+        timestamp=datetime.datetime.now().isoformat(timespec="seconds"),
+        os=platform.system() + " " + platform.release(),
+        arch=platform.machine(),
+        device=env_meta.get("gpu"),
+        warmup=None, iters=None,
+        date=date, run_id=run_id, argv=sys.argv[1:],
+        env=env_meta)
     with open(os.path.join(outdir, "run.json"), "w") as f:
         json.dump(meta, f, indent=2)
 
@@ -390,6 +404,18 @@ def main():
     results_path = os.path.join(outdir, "results.jsonl")
 
     def emit(rec):
+        # normalize to schema-1 rows: canonical schema key, required
+        # identity fields, and status in {ok, skip, fail} with the harness's
+        # own status preserved as health_status
+        rec.pop("schema_version", None)
+        rec["schema"] = SCHEMA_VERSION
+        rec.setdefault("kernel", "?")
+        rec.setdefault("variant", rec.get("phase", "-"))
+        rec.setdefault("shape", {})
+        rec.setdefault("dtype", "none")
+        if rec.get("status") not in ("ok", "skip", "fail"):
+            rec["health_status"] = rec.get("status")
+            rec["status"] = "fail"
         records.append(rec)
         with open(results_path, "a") as f:
             f.write(json.dumps(rec) + "\n")
