@@ -3,7 +3,7 @@
 # Shared core of every backend's perf/harness/run_bench.sh.
 #
 # SYNCED COPY — the canonical file is tools/templates/run_bench_core.sh in the
-# QuixiCore umbrella repo, distributed by tools/sync_perf_tooling.rb. Edit it
+# QuixiCore umbrella repo, distributed by tools/sync_perf_tooling.py. Edit it
 # there, never here; tools/fleet_check.sh flags drift.
 #
 # The wrapper (run_bench.sh) sets QC_BACKEND and REPO_ROOT, defines

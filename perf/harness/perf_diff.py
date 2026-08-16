@@ -23,7 +23,7 @@ RUN is a run directory or a bare results.jsonl path. Exit codes: 0 clean,
 this fingerprint, 4 host-fingerprint mismatch.
 
 Copies of this tool are synced into each backend's perf/harness/ by the
-umbrella's tools/sync_perf_tooling.rb so standalone clones work; edit the
+umbrella's tools/sync_perf_tooling.py so standalone clones work; edit the
 umbrella copy, never a synced one.
 """
 
