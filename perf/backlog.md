@@ -4,6 +4,12 @@ The beam: 3-5 active idea families, best first. Pick from the top. Update
 after every concluded experiment. Kill criteria are binding — when one fires,
 record the kill in `perf/findings.md` and remove the family.
 
+Where measurable, each family carries a quantitative target derived from
+recorded data — a percentage of the measured roofline, or beating a named
+baseline by a stated margin — set from `perf/findings.md` or
+`perf/baseline_status.md`, never invented. The backend's aggregate score
+lives in `perf/scoreboard.md`.
+
 ## Beam
 
 ### 1. Build plumbing + A100 kernel re-baseline (perf.md Open Items #1–2)

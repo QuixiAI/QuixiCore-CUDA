@@ -17,6 +17,9 @@ Subcommands:
                           subcommand that writes)
   entry RUN               print a pre-filled optimization_status.md skeleton
   fingerprint RUN         print the host fingerprint derived from run.json
+  score RUN               weighted geomean (ms) of the timed rows — the one
+                          hill-climbable number; --record appends it to the
+                          backend's perf/scoreboard.md lineage
 
 RUN is a run directory or a bare results.jsonl path. Exit codes: 0 clean,
 1 regression or validation failure, 2 usage/schema error, 3 no baseline for
@@ -29,6 +32,7 @@ umbrella copy, never a synced one.
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -442,6 +446,59 @@ def cmd_fingerprint(args):
     return 0
 
 
+def cmd_score(args):
+    """One hill-climbable number per run: the weighted geometric mean of the
+    timed rows' medians (ms). Lower is better; comparable only within one
+    host fingerprint and row set. This is the loop's leaderboard — the thing
+    a long optimization session watches go down."""
+    rows, meta, run_dir, label = load_run(args.run)
+    weights = {}
+    if args.weights:
+        weights = json.loads(Path(args.weights).read_text())
+    timed, excluded = [], 0
+    for r in rows:
+        if r.get("status") == "ok" and r.get("target_ms"):
+            timed.append(r)
+        else:
+            excluded += 1
+    if not timed:
+        print("perf_diff score: no timed ok rows — nothing to score")
+        return 1
+    acc = total_w = 0.0
+    per_kernel = {}
+    for r in timed:
+        w = float(weights.get(r.get("kernel"), 1.0))
+        if w <= 0:
+            excluded += 1
+            continue
+        acc += w * math.log(r["target_ms"])
+        total_w += w
+        per_kernel.setdefault(r.get("kernel"), []).append(r["target_ms"])
+    geomean = math.exp(acc / total_w)
+    for kernel in sorted(per_kernel):
+        ms = per_kernel[kernel]
+        kg = math.exp(sum(math.log(v) for v in ms) / len(ms))
+        print(f"  {kernel}: {kg:.4g} ms geomean over {len(ms)} row(s)")
+    fp = fingerprint(meta)
+    print(
+        f"perf_diff score: {geomean:.4g} ms geomean over {len(timed)} timed "
+        f"row(s) ({excluded} excluded) on {fp}"
+    )
+    if args.record:
+        board = Path(args.record)
+        date = str(meta.get("timestamp", ""))[:10] or "unknown"
+        git = meta.get("git", "unknown")
+        note = args.note or "<fill in: what changed>"
+        row = f"| {date} | {geomean:.4g} | {len(timed)} | {fp} | {git} | {note} |\n"
+        text = board.read_text() if board.exists() else ""
+        text = text.replace("No scores recorded yet.\n", "")
+        if not text.rstrip().endswith("|"):
+            text = text.rstrip() + "\n"
+        board.write_text(text + row)
+        print(f"recorded in {board} — commit it with the promotion")
+    return 0
+
+
 def add_common(p):
     p.add_argument("--cv-limit", type=float, default=DEFAULT_CV_LIMIT)
     p.add_argument("--spread-limit", type=float, default=DEFAULT_SPREAD_LIMIT)
@@ -490,6 +547,13 @@ def main():
     f = sub.add_parser("fingerprint")
     f.add_argument("run")
     f.set_defaults(func=cmd_fingerprint)
+
+    sc = sub.add_parser("score")
+    sc.add_argument("run")
+    sc.add_argument("--weights", help="JSON file mapping kernel name to weight")
+    sc.add_argument("--record", help="append a row to this scoreboard file")
+    sc.add_argument("--note", default="", help="what changed (for --record)")
+    sc.set_defaults(func=cmd_score)
 
     args = ap.parse_args()
     sys.exit(args.func(args))

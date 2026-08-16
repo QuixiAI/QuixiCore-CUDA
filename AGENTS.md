@@ -89,11 +89,18 @@ they must not claim a performance improvement.
 - Keep `perf/backlog.md` to 3-5 active idea families, best first. Each family
   carries a parent result, hypothesis, evidence so far, next action, and kill
   criteria.
+- Where measurable, give each family a quantitative target derived from
+  recorded data — a percentage of the measured roofline, or beating a named
+  baseline by a stated margin — never an invented number. A numeric target is
+  what makes a long unattended session steerable.
 - Pick the next experiment from the top of the beam unless the user directs
   otherwise. Do not run a single-incumbent hill climb on one idea.
 - Do not kill a family on one failed singleton. If two ideas are individually
   neutral but touch independent costs, try the combination before retiring
   either.
+- Keep one low-priority cleanup lane — dead code, archives, simplification,
+  compile time — that never consumes the whole search. Schedule an occasional
+  simplification pass after a run of landed wins.
 - When an experiment concludes, update the beam (advance or kill) and promote
   durable conclusions to `perf/findings.md`. When a kill criterion fires,
   record the kill and its reason in `perf/findings.md` so it is never retried.
@@ -128,7 +135,34 @@ the trace path and conclusion, not the full trace.
 - When stuck (repeated rejects or sub-bar wins), re-read `perf/findings.md`,
   profile before guessing again, and prefer one structural change from a
   different beam family over another parameter retune.
+- Still stuck after that: consult an advisor model. Hand a stronger or
+  fresh-context model (for example a headless `claude -p` call) the latest
+  profile, `perf/findings.md`, and the current beam, and ask for new idea
+  FAMILIES — not variants of the incumbent. Advisor output feeds
+  `perf/backlog.md`; it is ideas, never evidence.
 <!-- qx:shared:end escalation -->
+
+<!-- qx:shared:begin standing-questions v1 -->
+## Standing Questions
+
+Run through these before picking the next experiment; they exist to break
+tunnel vision:
+
+- What does the latest profile actually say, and does it match the assumed
+  bottleneck? When did we last profile?
+- What information are we missing, and what is the cheapest way to get it?
+- What fusion candidates exist — values that round-trip through memory
+  between launches, or multiple reductions sweeping the same data?
+- What runtime signal can become a static signal — shapes, dtypes, formats,
+  or alignments worth specializing or templating on?
+- Is there numerical slack — precision the tolerance contract allows that we
+  are not spending?
+- Could a bug, not a bottleneck, be costing time (wrong launch geometry, an
+  accidental sync, dead work)? A subagent bug hunt is cheap.
+- What does the input data actually look like, and is there structure —
+  sparsity, low rank, repeated values, outlier channels — a specialized path
+  could exploit? (Distributions: `registry/benchmark-shapes.yaml`.)
+<!-- qx:shared:end standing-questions -->
 
 <!-- qx:shared:begin git-policy v1 -->
 ## Git Publishing Policy
