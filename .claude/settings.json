@@ -35,12 +35,12 @@
       "Bash(git blame:*)",
       "Bash(git ls-files:*)",
       "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
       "Bash(python:*--version:*)",
       "Bash(python:*--help:*)",
       "Bash(pip list:*)",
       "Bash(pip show:*)",
-      "Bash(nvcc --version:*)",
-      "Bash(nvidia-smi:*)",
       "Bash(uname:*)",
       "Bash(whoami)",
       "Bash(id)",
@@ -54,10 +54,12 @@
       "Bash(make run:*)",
       "Bash(make test:*)",
       "Bash(make clean:*)",
+      "Bash(nvcc --version:*)",
       "Bash(nvcc:*)",
-      "Bash(git:*)"
+      "Bash(nvidia-smi:*)"
     ],
     "deny": [
+      "Bash(git push:*)",
       "Bash(rm -rf *)",
       "Bash(sudo:*)",
       "Bash(su :*)",
