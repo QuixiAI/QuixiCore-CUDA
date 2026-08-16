@@ -43,8 +43,8 @@ re-reading their evidence, never by guessing.
 |---|---|---|---:|
 | 2026-07-06 | Shared Performance Documentation Alignment | LANDED | 50 |
 | 2026-07-06 | Current High-Leverage Backlog | RECORDED | 67 |
-| 2026-08-01 | A100-vs-MI300X campaign | RECORDED | 89 |
-| 2026-08-01 | Campaign closed | RECORDED | 257 |
+| 2026-08-01 | A100-vs-MI300X campaign | RECORDED | 91 |
+| 2026-08-01 | Campaign closed | RECORDED | 259 |
 <!-- qx:index:end -->
 
 ## 2026-07-06: Shared Performance Documentation Alignment — LANDED
@@ -85,6 +85,8 @@ Status: baselined, experiments pending or partially complete.
   per-kernel tables here?
 - Should `perf/bench_kernels.py` grow a single normalized JSON schema for all
   standalone CUDA harnesses?
+
+> Superseded as a queue by perf/backlog.md (2026-08-15); kept as history.
 
 ## 2026-08-01: A100-vs-MI300X campaign — RECORDED
 

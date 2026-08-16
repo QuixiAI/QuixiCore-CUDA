@@ -1,18 +1,179 @@
 # QuixiCore CUDA Baseline Status
 
 Baseline snapshots for CUDA kernel performance work. Method and harness are
-described in `perf/perf.md`; ongoing optimization decisions live in
-`perf/optimization_status.md`. Raw results live under `perf/results/`
-(git-ignored).
+described in `perf/perf.md`; distilled established results live in
+`perf/findings.md`; the active experiment queue is `perf/backlog.md`; ongoing
+optimization decisions live in `perf/optimization_status.md`. Raw results
+live under `perf/results/` (git-ignored — dead on any clone; copy summaries
+into the notebook instead of citing run paths as evidence).
 
-## Environment (all numbers below)
+Restructured 2026-08-15 to implement `perf/perf.md` Open Item #3: the current
+host is the A100 box below, and everything 3090-era or pre-port moved
+verbatim (headings demoted one level, bodies unchanged) to
+[Superseded (historical)](#superseded-historical). Nothing was deleted and no
+numbers were added or changed in the move.
+
+## Environment
+
+Current validation host, from `perf/perf.md` Host Reality (2026-07-30):
+
+- 8x NVIDIA A100-SXM4-80GB (GA100, **SM 8.0**), 80 GB HBM2e each
+- Driver 595.45.04, CUDA toolkit 13.2, PyTorch 2.13.0+cu130
+- 108 SMs; 40 MB L2; 164 KB smem/SM (163 KB max dynamic per block);
+  65536 regs/block; 2048 threads/SM
+- NVLink: full NV12 mesh between all 8 GPUs (~600 GB/s bidirectional per
+  GPU). `kernels/parallel/` stays blocked on `multimem` (SM90+), not on the
+  fabric.
+- No `.venv` in this repo — point at an interpreter with torch explicitly.
+- OS / kernel version: TBD (record on next A100 session)
+- Repo commit for the 2026-07-30 validation: TBD (record on next A100 session)
+
+The 3090-era numbers in Superseded below are a different target's results
+(RTX 3090, SM 8.6), not this host's baseline.
+
+## Build + gate (the standing invariant)
+
+- **Arch flags are host-dependent.** `-gencode arch=compute_80,code=sm_80`
+  on A100, `compute_86,code=sm_86` on the 3090, or a multi-arch list.
+  `code=sm_86` binaries fail to launch on SM 8.0.
+  `kernels/tm_cuda/{setup.py,build_ext.sh}` and the per-kernel harness
+  headers still hard-code `sm_86`; parameterizing them is `perf/backlog.md`
+  family 1.
+- The sm_80 build is proven sufficient: swapping the arch flag was the only
+  change needed for the 9-TU extension to build and run on this host
+  (2026-07-30) — 70/70 tk-independent tests green, all 117 bound ops load.
+- The end-to-end gate is bare pytest (13 test files), with torch's `lib/`
+  on `LD_LIBRARY_PATH`:
+
+  ```bash
+  cd kernels/tm_cuda && LD_LIBRARY_PATH=<torch>/lib \
+    CUDA_VISIBLE_DEVICES=0 python3 -m pytest -q
+  ```
+
+  Until the `tk` module is restored (perf.md Open Item #9), the 3
+  tk-dependent files cannot even collect; the interim gate is the 10-file
+  explicit list in perf.md "Build And Correctness".
+- For `include/` substrate changes, also run `make -C tests` and the
+  `perf/tools/sm80_*_smoke.cu` primitive smokes.
+
+## Kernel roofline snapshot (dated)
+
+Measured rooflines on one idle A100 (2026-07-30, CUDA events, warmed) — from
+perf.md Host Reality:
+
+| metric | measured | spec | % of spec |
+|---|--:|--:|--:|
+| DRAM copy (read+write) | **1750 GB/s** | 2039 | 86% |
+| DRAM read (reduction) | 1655 GB/s | 2039 | 81% |
+| cuBLAS bf16 GEMM 8192³ | **239 TFLOP/s** | 312 | 77% |
+| cuBLAS bf16 GEMM 4096³ | 218 TFLOP/s | 312 | 70% |
+| int8 tensor GEMM 8192³ | 353 TOP/s | 624 | 57% |
+| TF32 GEMM 8192³ | 141 TFLOP/s | 156 | 90% |
+| FP32 GEMM 8192³ | 19.1 TFLOP/s | 19.5 | 98% |
+
+Framework baselines on one idle A100 (2026-07-30, same source):
+
+| op | shape | measured |
+|---|---|--:|
+| SDPA (flash, causal, bf16) | B4 H32 N4096 D128 | 153 TFLOP/s |
+| SDPA (flash, causal, bf16) | B8 H32 N2048 D128 | 142 TFLOP/s |
+| SDPA (flash, causal, bf16) | B8 H32 N2048 D64 | 128 TFLOP/s |
+| `rms_norm` bf16 | 65536×4096 | 1504 GB/s |
+| `rms_norm` bf16 | 16384×4096 | 1392 GB/s |
+| `silu` bf16 | 65536×4096 | 1687 GB/s |
+| `softmax` bf16 | 65536×4096 | 742 GB/s |
+
+End-to-end serving snapshot — the latest campaign matrix (earlier matrices
+are in Superseded). Method as recorded 2026-08-01: real varied prompts,
+temp 0, natural stops, tokens/drain-time, max_num_seqs 64, fp8 KV, DSpark
+k=3 draft-TP1, CUDA graphs, no Triton.
+
+### A100 matrix — 2026-08-01 post iter10 (mean-of-3 at 1/32/64)
+| conns | 1 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|
+| 4x TP4 | 65.7 | 138.3 | 204.0 | 272.5 | 325.6 | 391.7 |
+| 8x TP8 | 80.6 | 166.7 | 304.8 | 333.1 | 550.0 | 626.4 |
+TP4 beats reference at 8/16/32; 98% at bs=4, 96% at bs=64, 80% at bs=1.
+
+The campaign-final README matrix (SlimServe 63e639171, recorded in the
+2026-08-01 "Campaign closed" notebook entry) matches this within rounding:
+TP4 66/138/204/273/326/392 vs 2x MI300X reference 82/141/176/260/297/408.
+
+## Per-family status
+
+Status on this host (A100, SM 8.0). "TBD" means not yet measured here —
+see `perf/backlog.md` family 1.
+
+| family | status on A100 | source |
+|---|---|---|
+| tm_cuda extension (quant, serving, moe_quant, elementwise, lin_attn_tm, moe) | correct: 70/70 tk-independent tests, 117 ops load (2026-07-30); kernel-harness perf baseline TBD | perf.md Host Reality |
+| Serving decode path (MLA fp8, split-K, GGUF GEMV/MMQ routing, MoE Q2_K/Q8_0) | optimized end-to-end through the 2026-08-01 campaign (iters 1–12); wins and rejections distilled in `perf/findings.md` | optimization_status.md 2026-08-01 |
+| q2k_ampere (integer/dp4a route, new) | landed: repack bit-exact, GEMV 0.61% rel; M=1 44% of ceiling, compute-bound from M≥2 | a100_glm52_design.md §2.5b |
+| Standalone TK kernels (layernorm, mha_ampere, gemm int8/fp8_ampere, rotary, flux, based, hedgehog, linear_attention, mamba2, fftconv_non_pc) | SM86-validated (see Superseded); A100 runtime numbers TBD | Superseded: Ampere (SM86) Port Status |
+| fftconv_pc | newly runnable here (163 KB smem vs its 112 KB need); not yet run — TBD | perf.md Open Item #4 |
+| SM90+/Blackwell kernels (mha_h100*, gemm/*_b200, bf16_b300*) | build-only on this host (unchanged) | perf.md |
+| parallel/ (13 kernels) | capability_gated: NVLink fabric now present, `multimem` still SM90+ | perf.md Host Reality; backlog_parallel.md |
+
+## Deferred (bigger projects, flagged not faked)
+
+Not scheduled on the beam; recorded here so absence of numbers is never
+mistaken for measurement. Details in `perf/backlog.md` "Parked".
+
+- A100 kernel-harness re-baseline (29-format qgemv sweep, MetalForge
+  serving table, `qgemm_ksplit` threshold) — until it lands, per-kernel
+  A100 numbers are TBD, not inferred from the 3090.
+- Restore/vendor the `tk` module (perf.md Open Item #9) — unblocks the full
+  pytest gate, golden regeneration, and `bench_vs_torch.py`.
+- Register the port families in the `bench_kernels.py` registry (Open Item
+  #5) — only 4/45 entries runnable today.
+- `shared_to_register.cuh` audit on H100 + int shared<->register unit tests
+  (Open Item #8).
+- Multi-GPU BAR1-P2P + `parallel/` track — parked with its own resume doc,
+  `backlog_parallel.md` (3090 box).
+
+## Decision log
+
+- 2026-07-03: Added `perf/` harness (`bench_kernels.py`, `tk_bench_layernorm.py`,
+  `bench_reference.py`, `perf.md`, this file). `perf/results/` git-ignored.
+- 2026-07-03: Fixed `include/pyutils/torchutils.cuh` to guard PGL /
+  `TKParallelTensor` machinery behind `KITTENS_SM90/SM10X/SM120` (it broke every
+  SM80 PyTorch-extension build) and to include `<torch/csrc/utils/pybind.h>`
+  directly (was inherited transitively via `parallel_tensor.cuh`). SM90+ builds
+  verified unaffected (all pytorch-config kernels rebuilt cleanly after the
+  change).
+- 2026-07-03: Fixed missing `#include <chrono>` in
+  `kernels/attention/mha_h100_lcf/mha_h100_lcf.cu` (pre-existing build failure).
+- 2026-07-03: Rebuilding arch-portable kernels with `ARCH=SM80` for execution on
+  Ampere is done automatically by the harness (`sm80_ok` registry flag).
+- 2026-08-15: Restructured this file per perf.md Open Item #3 — added the
+  A100 host block; moved the Hardware Gap section, the old Per-Kernel Status
+  Table, the 3090-era baselines, the earlier post-iterN matrices, and the
+  Run Index verbatim to Superseded. Added `perf/findings.md` (distilled
+  results) and `perf/backlog.md` (experiment queue); the notebook's
+  2026-07-06 backlog entry is annotated as superseded-as-a-queue. No new
+  measurements.
+
+<a name="superseded-historical"></a>
+## Superseded (historical)
+
+Everything below is moved, not deleted: headings demoted one level, bodies
+verbatim, each with a reason line. Do not cite these as this host's current
+baseline.
+
+**Reason: 2026-07-03 RTX 3090 host block — applies only to the 3090-era
+baselines below; the current host block is the Environment section above.**
+
+### Environment (all numbers below)
 
 - Host: 8x NVIDIA GeForce RTX 3090 (SM 8.6 / Ampere, 24 GB), driver 580.65.06
 - CUDA toolkit 12.9 (`/usr/local/cuda`), PyTorch 2.12.1+cu130, Python 3.12.3
 - Repo: commit `02e9acbd` + perf harness + two small fixes (see Decision Log)
 - Date: 2026-07-03
 
-## The Hardware Gap (read first)
+**Reason: pre-dates the Ampere port — perf.md Open Items #3. Contradicted by
+the "Ampere (SM86) Port Status" table below, which is the correct record.**
+
+### The Hardware Gap (read first)
 
 Every kernel in this repo except `layernorm` and the cuBLAS baseline programs
 uses TMA and/or WGMMA/tcgen05, which require SM 9.0+ (H100) or SM 10.x (B200/
@@ -26,7 +187,10 @@ Completing runtime baselines requires an H100/B200/B300 host; the harness
 the standalone GEMM/attention kernels self-benchmark and their output is
 captured/parsed by the run phase.
 
-## Build Baseline — 42/42 kernels compile cleanly
+**Reason: 3090-era build baseline (commit `02e9acbd`, 2026-07-03). Kept:
+SM86 is a declared target.**
+
+### Build Baseline — 42/42 kernels compile cleanly
 
 Run: `perf/results/2026-07-03/baseline-build` (+ `lcf-rebuild`). Highlights,
 worst kernel per directory (`regs` = max registers across entry points,
@@ -59,7 +223,9 @@ worst kernel per directory (`regs` = max registers across entry points,
 Full per-kernel table: `perf/results/2026-07-03/baseline-build/results.jsonl`
 and `summary.md` there.
 
-## Runtime Baseline — layernorm (the one executable TK kernel)
+**Reason: 3090-era runtime baseline. Kept: SM86 is a declared target.**
+
+### Runtime Baseline — layernorm (the one executable TK kernel)
 
 `fused_layernorm` = dropout + residual-add + LayerNorm, bf16, `d_model=1024`
 (hard-coded), seq divisible by 16. Built `ARCH=SM80`, run on one RTX 3090.
@@ -91,7 +257,10 @@ from shared power/host contention. The isolated `layernorm-run` numbers above
 are canonical; the relative ordering (TK ≈ triton >> torch eager) is identical
 in both runs.
 
-## Reference GEMM Baseline — cuBLAS on RTX 3090
+**Reason: 3090-era cuBLAS reference. Kept: SM86 is a declared target. The
+A100 cuBLAS references are in the roofline snapshot above.**
+
+### Reference GEMM Baseline — cuBLAS on RTX 3090
 
 `gemm/baselines/{bf16_cublas,bf16_cublas_lt,int8_cublas_lt}` rebuilt
 `ARCH=SM80`, 500 warmup / 100 iters each. Canonical numbers below are from
@@ -117,7 +286,10 @@ contention artifacts, not library behavior. Judge large-size numbers only
 from an idle, cool GPU, and re-measure anything surprising before believing
 it.
 
-## Framework Reference — PyTorch on RTX 3090
+**Reason: 3090-era framework reference. Kept: SM86 is a declared target. The
+A100 framework references are in the roofline snapshot above.**
+
+### Framework Reference — PyTorch on RTX 3090
 
 `perf/bench_reference.py`, archived at
 `perf/results/reference/rtx3090_reference.json`.
@@ -133,7 +305,9 @@ it.
 These are the numbers TK kernels must beat (or match with better fusion) on
 this device class.
 
-## Per-Kernel Status Table
+**Reason: pre-dates the A100 port — perf.md Open Items #3.**
+
+### Per-Kernel Status Table
 
 Status legend: `build-only` = compiles for declared arch, cannot execute here;
 `baselined` = runtime numbers recorded on this host.
@@ -152,22 +326,11 @@ Status legend: `build-only` = compiles for declared arch, cannot execute here;
 | gemm/baselines/{fp8,mxfp8,nvfp4}_cublas_lt | build-only | fp8/fp4 hw (SM89/SM100+) |
 | parallel/* (13) | build-only | multimem + TMA (SM90+), NVLink fabric |
 
-## Decision Log
+**Reason: 3090 (SM 8.6) numbers — a different target's results, superseded
+as this host's baseline. Kept: SM86 is a declared target and this table
+remains the port's acceptance evidence.**
 
-- 2026-07-03: Added `perf/` harness (`bench_kernels.py`, `tk_bench_layernorm.py`,
-  `bench_reference.py`, `perf.md`, this file). `perf/results/` git-ignored.
-- 2026-07-03: Fixed `include/pyutils/torchutils.cuh` to guard PGL /
-  `TKParallelTensor` machinery behind `KITTENS_SM90/SM10X/SM120` (it broke every
-  SM80 PyTorch-extension build) and to include `<torch/csrc/utils/pybind.h>`
-  directly (was inherited transitively via `parallel_tensor.cuh`). SM90+ builds
-  verified unaffected (all pytorch-config kernels rebuilt cleanly after the
-  change).
-- 2026-07-03: Fixed missing `#include <chrono>` in
-  `kernels/attention/mha_h100_lcf/mha_h100_lcf.cu` (pre-existing build failure).
-- 2026-07-03: Rebuilding arch-portable kernels with `ARCH=SM80` for execution on
-  Ampere is done automatically by the harness (`sm80_ok` registry flag).
-
-## Ampere (SM86) Port Status — 2026-07-03
+### Ampere (SM86) Port Status — 2026-07-03
 
 The SM90+ kernels are being ported to run on this box's 3090s (plan:
 `~/.claude/plans/all-the-kernels-that-serene-storm.md`). Library groundwork
@@ -225,7 +388,10 @@ where noted):
    file identical to all-terms). The kernel computes the UNSCALED convention;
    fixed by calling with `add_scale=False, TESTNAME=TESTNAME`.
 
-## Run Index
+**Reason: run dirs are git-ignored and dead on clones — superseded as
+evidence pointers; conclusions live in the notebook.**
+
+### Run Index
 
 | run | contents |
 |---|---|
@@ -237,7 +403,11 @@ where noted):
 | `perf/results/2026-07-03/layernorm-run/` | first archived layernorm run |
 | `perf/results/reference/rtx3090_reference.json` | torch matmul/SDPA/layernorm sweep |
 
-## Open Questions
+**Reason: 2026-07-03 questions. The canonical-host question is answered for
+SM80 by the A100 host; still open for SM90/SM100 (tracked in perf.md Open
+Items).**
+
+### Open Questions
 
 - Which target device should runtime baselines be recorded on for the
   SM90/SM100 kernels — is an H100/B200 host available to this project?
@@ -247,7 +417,10 @@ where noted):
   support; 8x 3090 (PCIe/pairwise NVLink) cannot validate them even if the
   arch gap were closed.
 
-## A100 end-to-end matrix — 2026-08-01, post vectorized-MLA (agg tok/s)
+**Reason: superseded by the post-iter10 snapshot above; kept for
+cross-iteration history.**
+
+### A100 end-to-end matrix — 2026-08-01, post vectorized-MLA (agg tok/s)
 Method: real varied prompts, temp 0, natural stops, tokens/drain-time,
 max_num_seqs 64, fp8 KV, DSpark k=3 draft-TP1, CUDA graphs, no Triton.
 | conns | 1 | 4 | 8 | 16 | 32 | 64 |
@@ -258,7 +431,10 @@ max_num_seqs 64, fp8 KV, DSpark k=3 draft-TP1, CUDA graphs, no Triton.
 TP8 beats the 2x MI300X reference at 8/16/32/64. TP4 bs=16 dent (165.8,
 barely above bs=8) flagged as a scheduling anomaly.
 
-## A100 matrix — 2026-08-01 post iter4 (balanced split-K + GEMV tile)
+**Reason: superseded by the post-iter10 snapshot above; kept for
+cross-iteration history.**
+
+### A100 matrix — 2026-08-01 post iter4 (balanced split-K + GEMV tile)
 | conns | 1 | 4 | 8 | 16 | 32 | 64 |
 |---|---|---|---|---|---|---|
 | 4x TP4 | 68.2 | 125.3 | 163.1 | 184.1 | 267.5 | 263.6 |
@@ -267,7 +443,10 @@ NOTE: high-batch columns swing +/-12-15% between full runs (TP8@32: 418 then
 368; TP4@64: 312 then 264) -- single-run numbers at 32/64 are not stable
 enough to attribute to code changes without repeats. Filed as lead [l].
 
-## A100 matrix — 2026-08-01 post iters 6+7 (mean-of-3 at bs 1/32/64)
+**Reason: superseded by the post-iter10 snapshot above; kept for
+cross-iteration history.**
+
+### A100 matrix — 2026-08-01 post iters 6+7 (mean-of-3 at bs 1/32/64)
 | conns | 1 | 4 | 8 | 16 | 32 | 64 |
 |---|---|---|---|---|---|---|
 | 4x TP4 | 66.2 | 110.9 | 183.3 | 239.5 | 275.1 | 307.7 |
@@ -276,7 +455,10 @@ enough to attribute to code changes without repeats. Filed as lead [l].
 TP8 beats the reference at EVERY column (incl. bs=1). TP4 beats it at bs=8;
 remaining TP4 gaps: 81%/79%/-/92%/93%/75%.
 
-## A100 matrix — 2026-08-01 post iter8 (mean-of-3 at 1/32/64)
+**Reason: superseded by the post-iter10 snapshot above; kept for
+cross-iteration history.**
+
+### A100 matrix — 2026-08-01 post iter8 (mean-of-3 at 1/32/64)
 | conns | 1 | 4 | 8 | 16 | 32 | 64 |
 |---|---|---|---|---|---|---|
 | 4x TP4 | 73.1 | 110.0 | 140.6 | 201.7 | 299.6 | 360.7 |
@@ -287,7 +469,10 @@ logit changes alter generation lengths (drain-efficiency artifact, not speed:
 fixed-length guards within 2%). Mid-batch cells need fixed-workload or
 mean-of-3 treatment before further cross-matrix claims.
 
-## A100 matrix — 2026-08-01 post iter9 (mean-of-3 at 1/32/64)
+**Reason: superseded by the post-iter10 snapshot above; kept for
+cross-iteration history.**
+
+### A100 matrix — 2026-08-01 post iter9 (mean-of-3 at 1/32/64)
 | conns | 1 | 4 | 8 | 16 | 32 | 64 |
 |---|---|---|---|---|---|---|
 | 4x TP4 | 65.2 | 130.9 | 203.4 | 259.1 | 310.7 | 352.7 |
@@ -295,10 +480,3 @@ mean-of-3 treatment before further cross-matrix claims.
 TP4 beats the reference at bs=8/32; bs=16 at 99.7% (iter9 ms/step -13%
 corroborates). TP8 beats at every column. TP4 gaps: bs=1 79%, bs=4 93%,
 bs=64 86%.
-
-## A100 matrix — 2026-08-01 post iter10 (mean-of-3 at 1/32/64)
-| conns | 1 | 4 | 8 | 16 | 32 | 64 |
-|---|---|---|---|---|---|---|
-| 4x TP4 | 65.7 | 138.3 | 204.0 | 272.5 | 325.6 | 391.7 |
-| 8x TP8 | 80.6 | 166.7 | 304.8 | 333.1 | 550.0 | 626.4 |
-TP4 beats reference at 8/16/32; 98% at bs=4, 96% at bs=64, 80% at bs=1.
