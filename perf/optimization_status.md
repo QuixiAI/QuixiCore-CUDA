@@ -325,3 +325,26 @@ Open questions: none for the native path; TC fp8 as above.
 Raw results: SlimServe perf/results/2026-09-12/kernel-bench/
 {baseline,fp8-lane,fp8-pair}.json. (tools/perf_notebook.py is absent in
 this checkout; index not regenerated.)
+
+## 2026-09-12: mHC transition kernels (GLM-5.3 TP4 x DP2 decode) — LANDED in SlimServe, PORT OPEN
+
+Status: landed (SlimServe csrc/quixicore/serving/mhc_ampere.cuh); the mHC
+family (`tms::dsv4_mhc`) is not yet vendored in this repository, so the
+port is an open item.
+Baseline (A100, c32 decode step of the record, one worker trace): mHC
+partials 7.0 ms/step (89 launches at 78 us), pre-mix norm 1.06 ms,
+finalize 0.72 ms - 18% of the 49 ms step.
+Experiments (op-level, T tokens, us per fused_post_pre):
+| change | T=16 | T=32 | T=64 | T=128 | verdict |
+|---|---|---|---|---|---|
+| per-token partials (fn re-read per token) | - | 78 (kernel) | - | - | baseline |
+| partials_batched TT=4 (fn read per 4-token tile) | 31.8 | 39.7 | 55.5 | 93.0 | LANDED (bit-exact residual, coefficients 2e-7) |
+| fn as half instead of fp32 | 35.0 | 43.1 | 58.4 | 95.9 | REJECTED (slower) |
+| fused finalize + norm, 1024-thread block | 31.7 | 41.7 | 61.2 | 108.4 | LANDED (bit-identical) |
+| 8-token split-output partials | 36.2 | 52.2 | 68.5 | 101.0 | REJECTED below T=128 |
+Decision: the transition op at T=32 went 98 -> 42 us; at 90 sites per
+step that is ~5 ms of a 49 ms step. Remaining: the first-layer pre and
+the taps/post ops are unchanged; the SIMT Triton path (T <= 64 at the
+MoE site) was not touched.
+Raw results: SlimServe perf/results/2026-09-12/kernel-bench/ and the
+2026-09-12 notebook entries.
