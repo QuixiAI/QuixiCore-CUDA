@@ -262,3 +262,38 @@ TP4 66/138/204/273/326/392 vs reference 82/141/176/260/297/408 — wins at
 8/16/32 conns, 98%/96% at 4/64, 80% at bs=1; TP8 beats reference everywhere.
 Unstarted leads for any future resume: quantize_q8_1 quant-once (~4-5% bs=1),
 residual small-kernel pass, bs=64 residual (~4%).
+
+## 2026-09-12: Sparse MLA decode, fp8 NoPE latent (GLM-5.3 TP4 x DP2) — EXPERIMENTING
+
+Status: experimenting.
+Current implementation: `mla_decode_fp8_v<true, PART, 512, 512, 512, 1>`
+(all-fp8 NoPE slot, per-tensor scale; SlimServe csrc/quixicore/serving/
+mla_kernels.cuh) served by the VECFP8 per-token chain (4-byte loads per
+lane, per-element scale), plus the Triton tensor-core decode
+(SlimServe vllm/quixicore/sparse_mla_tc.py) with an in-kernel e4m3 decode.
+Current public route: SlimServe backend dispatches on cache dtype; fp8 is an
+opt-in (`glm5_next_main_kv_fp8`), bf16 is the record.
+References inspected: the VECBF16 lane-parallel path in the same kernel
+(32 indices per round, 16-byte loads, 4 rows in flight, 2026-09-03);
+handbook "Memory layout & vectorization" and "fp8 dequant-on-read" items.
+Correctness: tests/kernels/test_quixicore_sparse_mla_bf16.py -k fp8 (9
+cases vs fp32 reference, 5e-3 rel) and tests/glm5_next/
+test_sparse_tc_candidate.py -k fp8 (6 cases vs the native kernel).
+Baseline (A100 SM80, CUDA 12.x, torch 2.x, B rows x H=16 heads, top-k 2048
+of 2080, 512 pages x 576 slots, 30 iters median, us per launch):
+| B | native bf16 P128 | native fp8 P128 (old) | TC bf16 split128 | TC fp8 split64 (old) |
+|---|---|---|---|---|
+| 16 | 327 | 662 | 86 | 182 |
+| 32 | 602 | 1206 | 145 | 361 |
+| 128 | 2155 | 3929 | - | - |
+Raw: SlimServe perf/results/2026-09-12/kernel-bench/baseline.json.
+Classification: the fp8 paths are 2-2.5x the bf16 ones while moving half
+the bytes; neither is bandwidth-bound (bf16 TC at B=32: 64 MB in 145 us =
+0.44 TB/s), so the cost is the decode structure (per-token chain, 4-byte
+loads, per-element scale) and int32 temporaries in the Triton tile.
+Experiments (in flight): (1) VECFP8L lane-parallel fp8 row path in the
+native kernel (16-byte loads, kv_scale folded into q and applied once to
+the accumulator); (2) Triton fp8 decode via 16-bit assembly to fp16 with
+the scale folded into q. Decision and serving A/B follow the bench.
+Open questions: whether fp8 can beat bf16 at decode batch (the TC kernel
+is not byte-bound at B<=32) or only match it (capacity win at no cost).
