@@ -16,6 +16,9 @@
 #include "sampling_kernels.cuh"
 #include "spec_beam_kernels.cuh"
 #include "turboquant_kernels.cuh"
+#include "mhc_ampere.cuh"
+#include "kda_decode_kernels.cuh"
+#include <cstdlib>
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 
@@ -1199,7 +1202,425 @@ static torch::Tensor py_mla_decode_bf16_sparse_nope(torch::Tensor q, torch::Tens
     return out;
 }
 
+// ---- GLM-5.3 / DSV4 mHC transition (ported from SlimServe csrc/quixicore, 2026-09-12) ----
+static bool dsv4_mhc_cooperative_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("VLLM_DSV4_MHC_COOPERATIVE");
+        return value == nullptr || value[0] != '0';
+    }();
+    return enabled;
+}
+
+static int dsv4_mhc_splits() {
+    static const int splits = [] {
+        const char* value = std::getenv("VLLM_DSV4_MHC_SPLITS");
+        if (value == nullptr) return 64;
+        const int parsed = std::atoi(value);
+        return parsed == 32 || parsed == 64 ? parsed : 64;
+    }();
+    return splits;
+}
+
+template <typename FnT, bool FUSED_POST, bool RMS_NORM, int NSPLITS>
+static void launch_dsv4_mhc_pre_transition(
+        const torch::Tensor* x, torch::Tensor residual,
+        const torch::Tensor* post_mix, const torch::Tensor* comb_mix,
+        torch::Tensor fn, torch::Tensor* residual_out, torch::Tensor partial,
+        torch::Tensor scale, torch::Tensor base, torch::Tensor next_post,
+        torch::Tensor next_comb, torch::Tensor layer_input,
+        const torch::Tensor* norm_weight, float rms_eps, float pre_eps,
+        float sinkhorn_eps, float post_multiplier, int sinkhorn_repeat,
+        float norm_eps) {
+    const __nv_bfloat16* x_ptr = FUSED_POST ? bp(*x) : nullptr;
+    const __nv_bfloat16* residual_ptr = bp(residual);
+    const float* post_ptr = FUSED_POST ? fp(*post_mix) : nullptr;
+    const float* comb_ptr = FUSED_POST ? fp(*comb_mix) : nullptr;
+    const FnT* fn_ptr = reinterpret_cast<const FnT*>(fn.data_ptr());
+    __nv_bfloat16* residual_out_ptr =
+        FUSED_POST ? bpm(*residual_out) : nullptr;
+    float* partial_ptr = fpm(partial);
+    const float* scale_ptr = fp(scale);
+    const float* base_ptr = fp(base);
+    float* next_post_ptr = fpm(next_post);
+    float* next_comb_ptr = fpm(next_comb);
+    __nv_bfloat16* layer_input_ptr = bpm(layer_input);
+    const __nv_bfloat16* norm_ptr = RMS_NORM ? bp(*norm_weight) : nullptr;
+    auto kernel =
+        dsv4_mhc::fused_pre_transition<FUSED_POST, RMS_NORM, 4096, NSPLITS,
+                                       FnT>;
+    void* args[] = {
+        &x_ptr, &residual_ptr, &post_ptr, &comb_ptr, &fn_ptr,
+        &residual_out_ptr, &partial_ptr, &scale_ptr, &base_ptr,
+        &next_post_ptr, &next_comb_ptr, &layer_input_ptr, &norm_ptr,
+        &rms_eps, &pre_eps, &sinkhorn_eps, &post_multiplier,
+        &sinkhorn_repeat, &norm_eps,
+    };
+    const cudaError_t error = cudaLaunchCooperativeKernel(
+        reinterpret_cast<const void*>(kernel), dim3(NSPLITS, 1),
+        dim3(dsv4_mhc::THREADS), args, 0, stream());
+    TORCH_CHECK(error == cudaSuccess,
+                "DSV4 cooperative mHC launch failed: ",
+                cudaGetErrorString(error));
+}
+
+template <bool FUSED_POST, bool RMS_NORM>
+static void launch_dsv4_mhc_pre_transition_selected(
+        const torch::Tensor* x, torch::Tensor residual,
+        const torch::Tensor* post_mix, const torch::Tensor* comb_mix,
+        torch::Tensor fn, torch::Tensor* residual_out, torch::Tensor partial,
+        torch::Tensor scale, torch::Tensor base, torch::Tensor next_post,
+        torch::Tensor next_comb, torch::Tensor layer_input,
+        const torch::Tensor* norm_weight, float rms_eps, float pre_eps,
+        float sinkhorn_eps, float post_multiplier, int sinkhorn_repeat,
+        float norm_eps) {
+#define LAUNCH_MHC_TYPED(FN_T, NSPLITS)                                      \
+    launch_dsv4_mhc_pre_transition<FN_T, FUSED_POST, RMS_NORM, NSPLITS>(     \
+        x, residual, post_mix, comb_mix, fn, residual_out, partial, scale,   \
+        base, next_post, next_comb, layer_input, norm_weight, rms_eps,       \
+        pre_eps, sinkhorn_eps, post_multiplier, sinkhorn_repeat, norm_eps)
+    if (fn.scalar_type() == torch::kHalf) {
+        if (dsv4_mhc_splits() == 32) {
+            LAUNCH_MHC_TYPED(half, 32);
+        } else {
+            LAUNCH_MHC_TYPED(half, 64);
+        }
+    } else if (dsv4_mhc_splits() == 32) {
+        LAUNCH_MHC_TYPED(float, 32);
+    } else {
+        LAUNCH_MHC_TYPED(float, 64);
+    }
+#undef LAUNCH_MHC_TYPED
+}
+
+template <int NOUT, bool FUSED_POST>
+static void launch_dsv4_mhc_partials(
+        const __nv_bfloat16* x, const __nv_bfloat16* residual,
+        const float* post, const float* comb, torch::Tensor fn,
+        __nv_bfloat16* residual_out, float* partial, int hidden_size,
+        dim3 grid) {
+    if (fn.scalar_type() == torch::kHalf) {
+        dsv4_mhc::partials<NOUT, FUSED_POST, half>
+            <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                x, residual, post, comb,
+                reinterpret_cast<const half*>(fn.data_ptr()), residual_out,
+                partial, hidden_size);
+    } else {
+        dsv4_mhc::partials<NOUT, FUSED_POST, float>
+            <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                x, residual, post, comb, fp(fn), residual_out, partial,
+                hidden_size);
+    }
+}
+
+// Decode batches (T > 1): tile TT tokens per block so fn is read once per
+// tile (see dsv4_mhc::partials_batched). Same per-token arithmetic order as
+// the per-token kernel, so the partials are bit-identical.
+template <int NOUT>
+static void launch_dsv4_mhc_partials_batched(
+        const __nv_bfloat16* x, const __nv_bfloat16* residual,
+        const float* post, const float* comb, torch::Tensor fn,
+        __nv_bfloat16* residual_out, float* partial, int hidden_size, int tokens) {
+    static const int tt_env = [] {
+        const char* v = std::getenv("QC_MHC_PARTIALS_TT");
+        return v ? std::atoi(v) : 4;
+    }();
+    if (tt_env == 8) {
+        // Experimental: 8-token tiles with the outputs split across the two
+        // block halves (partials_batched_split); same per-token arithmetic.
+        constexpr int TT8 = 8;
+        const dim3 grid8(dsv4_mhc::SPLITS, (tokens + TT8 - 1) / TT8);
+        if (fn.scalar_type() == torch::kHalf) {
+            dsv4_mhc::partials_batched_split<NOUT, TT8, half>
+                <<<grid8, dsv4_mhc::THREADS, 0, stream()>>>(
+                    x, residual, post, comb,
+                    reinterpret_cast<const half*>(fn.data_ptr()), residual_out,
+                    partial, hidden_size, tokens);
+        } else {
+            dsv4_mhc::partials_batched_split<NOUT, TT8, float>
+                <<<grid8, dsv4_mhc::THREADS, 0, stream()>>>(
+                    x, residual, post, comb, fp(fn), residual_out, partial,
+                    hidden_size, tokens);
+        }
+        return;
+    }
+    constexpr int TT = 4;
+    const dim3 grid(dsv4_mhc::SPLITS, (tokens + TT - 1) / TT);
+    static const bool warp_split = [] {
+        const char* v = std::getenv("QC_MHC_PARTIALS_WS");
+        return v == nullptr || std::atoi(v) != 0;   // default on (2026-09-12)
+    }();
+    if (warp_split) {
+        if (fn.scalar_type() == torch::kHalf) {
+            dsv4_mhc::partials_batched_ws<NOUT, TT, half>
+                <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                    x, residual, post, comb,
+                    reinterpret_cast<const half*>(fn.data_ptr()), residual_out,
+                    partial, hidden_size, tokens);
+        } else {
+            dsv4_mhc::partials_batched_ws<NOUT, TT, float>
+                <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                    x, residual, post, comb, fp(fn), residual_out, partial,
+                    hidden_size, tokens);
+        }
+        return;
+    }
+    if (fn.scalar_type() == torch::kHalf) {
+        dsv4_mhc::partials_batched<NOUT, TT, half>
+            <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                x, residual, post, comb,
+                reinterpret_cast<const half*>(fn.data_ptr()), residual_out,
+                partial, hidden_size, tokens);
+    } else {
+        dsv4_mhc::partials_batched<NOUT, TT, float>
+            <<<grid, dsv4_mhc::THREADS, 0, stream()>>>(
+                x, residual, post, comb, fp(fn), residual_out, partial,
+                hidden_size, tokens);
+    }
+}
+static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> py_dsv4_mhc_pre(
+        torch::Tensor residual, torch::Tensor fn, torch::Tensor hc_scale,
+        torch::Tensor hc_base, double rms_eps, double pre_eps,
+        double sinkhorn_eps, double post_multiplier, int64_t sinkhorn_repeat,
+        c10::optional<torch::Tensor> norm_weight, double norm_eps) {
+    CK(residual); CK(fn); CK(hc_scale); CK(hc_base);
+    TORCH_CHECK(residual.scalar_type() == torch::kBFloat16, "residual must be bf16");
+    TORCH_CHECK(fn.scalar_type() == torch::kFloat32 ||
+                fn.scalar_type() == torch::kFloat16,
+                "fn must be float16 or float32");
+    const int T = residual.size(0), H = residual.size(2);
+    TORCH_CHECK(residual.size(1) == dsv4_mhc::HC && fn.size(0) == dsv4_mhc::MIXES,
+                "DSV4 mHC expects hc_mult=4 and 24 mix rows");
+    auto float_options = fn.options().dtype(torch::kFloat32);
+    auto partial = torch::empty({T, 64, dsv4_mhc::MIXES + 1}, float_options);
+    auto post = torch::empty({T, dsv4_mhc::HC}, float_options);
+    auto comb = torch::empty({T, dsv4_mhc::HC, dsv4_mhc::HC}, float_options);
+    auto layer_input = torch::empty({T, H}, residual.options());
+    if (dsv4_mhc_cooperative_enabled() && T == 1 && H == 4096) {
+        if (norm_weight) {
+            launch_dsv4_mhc_pre_transition_selected<false, true>(
+                nullptr, residual, nullptr, nullptr, fn, nullptr, partial,
+                hc_scale, hc_base, post, comb, layer_input, &*norm_weight,
+                float(rms_eps), float(pre_eps), float(sinkhorn_eps),
+                float(post_multiplier), int(sinkhorn_repeat), float(norm_eps));
+        } else {
+            launch_dsv4_mhc_pre_transition_selected<false, false>(
+                nullptr, residual, nullptr, nullptr, fn, nullptr, partial,
+                hc_scale, hc_base, post, comb, layer_input, nullptr,
+                float(rms_eps), float(pre_eps), float(sinkhorn_eps),
+                float(post_multiplier), int(sinkhorn_repeat), float(norm_eps));
+        }
+        return {post, comb, layer_input};
+    }
+    launch_dsv4_mhc_partials<dsv4_mhc::MIXES, false>(
+        nullptr, bp(residual), nullptr, nullptr, fn, nullptr, fpm(partial), H,
+        dim3(dsv4_mhc::SPLITS, T));
+    dsv4_mhc::finalize_pre_mix<<<T, 32, 0, stream()>>>(
+        fpm(partial), fp(hc_scale), fp(hc_base), fpm(post),
+        fpm(comb), H, float(rms_eps), float(pre_eps),
+        float(sinkhorn_eps), float(post_multiplier), int(sinkhorn_repeat));
+    if (norm_weight) {
+        TORCH_CHECK(norm_weight->is_cuda() && norm_weight->is_contiguous(),
+                    "norm_weight must be contiguous CUDA");
+        TORCH_CHECK(H == 4096 && norm_weight->scalar_type() == torch::kBFloat16 &&
+                    norm_weight->numel() == H,
+                    "fused DSV4 mHC RMSNorm expects a 4096-element bf16 weight");
+        dsv4_mhc::apply_pre_mix_rms_norm<dsv4_mhc::MIXES + 1>
+            <<<T, dsv4_mhc::THREADS, 0, stream()>>>(
+                fp(partial), bp(residual), bp(*norm_weight), bpm(layer_input),
+                float(norm_eps));
+    } else {
+        dsv4_mhc::apply_pre_mix<dsv4_mhc::MIXES + 1>
+            <<<dim3((H + dsv4_mhc::THREADS - 1) / dsv4_mhc::THREADS, T),
+                dsv4_mhc::THREADS, 0, stream()>>>(
+                fp(partial), bp(residual), bpm(layer_input), H);
+    }
+    return {post, comb, layer_input};
+}
+
+static std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+py_dsv4_mhc_fused_post_pre(
+        torch::Tensor x, torch::Tensor residual, torch::Tensor post_mix,
+        torch::Tensor comb_mix, torch::Tensor fn, torch::Tensor hc_scale,
+        torch::Tensor hc_base, double rms_eps, double pre_eps,
+        double sinkhorn_eps, double post_multiplier, int64_t sinkhorn_repeat,
+        c10::optional<torch::Tensor> norm_weight, double norm_eps) {
+    CK(x); CK(residual); CK(post_mix); CK(comb_mix); CK(fn); CK(hc_scale); CK(hc_base);
+    TORCH_CHECK(x.scalar_type() == torch::kBFloat16 &&
+                residual.scalar_type() == torch::kBFloat16, "x/residual must be bf16");
+    TORCH_CHECK((fn.scalar_type() == torch::kFloat32 ||
+                 fn.scalar_type() == torch::kFloat16) &&
+                post_mix.scalar_type() == torch::kFloat32 &&
+                comb_mix.scalar_type() == torch::kFloat32,
+                "mHC fn must be float16/float32 and mixes must be float32");
+    const int T = residual.size(0), H = residual.size(2);
+    TORCH_CHECK(residual.size(1) == dsv4_mhc::HC && fn.size(0) == dsv4_mhc::MIXES,
+                "DSV4 mHC expects hc_mult=4 and 24 mix rows");
+    auto residual_out = torch::empty_like(residual);
+    auto float_options = fn.options().dtype(torch::kFloat32);
+    auto partial = torch::empty({T, 64, dsv4_mhc::MIXES + 1}, float_options);
+    auto next_post = torch::empty({T, dsv4_mhc::HC}, float_options);
+    auto next_comb = torch::empty(
+        {T, dsv4_mhc::HC, dsv4_mhc::HC}, float_options);
+    auto layer_input = torch::empty({T, H}, residual.options());
+    if (dsv4_mhc_cooperative_enabled() && T == 1 && H == 4096) {
+        if (norm_weight) {
+            launch_dsv4_mhc_pre_transition_selected<true, true>(
+                &x, residual, &post_mix, &comb_mix, fn, &residual_out,
+                partial, hc_scale, hc_base, next_post, next_comb, layer_input,
+                &*norm_weight, float(rms_eps), float(pre_eps),
+                float(sinkhorn_eps), float(post_multiplier),
+                int(sinkhorn_repeat), float(norm_eps));
+        } else {
+            launch_dsv4_mhc_pre_transition_selected<true, false>(
+                &x, residual, &post_mix, &comb_mix, fn, &residual_out,
+                partial, hc_scale, hc_base, next_post, next_comb, layer_input,
+                nullptr, float(rms_eps), float(pre_eps), float(sinkhorn_eps),
+                float(post_multiplier), int(sinkhorn_repeat), float(norm_eps));
+        }
+        return {residual_out, next_post, next_comb, layer_input};
+    }
+    if (T > 1) {
+        launch_dsv4_mhc_partials_batched<dsv4_mhc::MIXES>(
+            bp(x), bp(residual), fp(post_mix), fp(comb_mix), fn,
+            bpm(residual_out), fpm(partial), H, T);
+    } else {
+        launch_dsv4_mhc_partials<dsv4_mhc::MIXES, true>(
+            bp(x), bp(residual), fp(post_mix), fp(comb_mix), fn,
+            bpm(residual_out), fpm(partial), H, dim3(dsv4_mhc::SPLITS, T));
+    }
+    static const bool fused_norm = [] {
+        const char* v = std::getenv("QC_MHC_FUSED_NORM");
+        return !(v && v[0] == '0');
+    }();
+    if (norm_weight && fused_norm && H == 4096) {
+        TORCH_CHECK(norm_weight->is_cuda() && norm_weight->is_contiguous() &&
+                    norm_weight->scalar_type() == torch::kBFloat16 &&
+                    norm_weight->numel() == H,
+                    "fused DSV4 mHC RMSNorm expects a 4096-element bf16 weight");
+        dsv4_mhc::finalize_apply_pre_mix_rms_norm<dsv4_mhc::MIXES + 1, 1024>
+            <<<T, 1024, 0, stream()>>>(
+                fpm(partial), fp(hc_scale), fp(hc_base), fpm(next_post),
+                fpm(next_comb), bp(residual_out), bp(*norm_weight), bpm(layer_input),
+                H, float(rms_eps), float(pre_eps), float(sinkhorn_eps),
+                float(post_multiplier), int(sinkhorn_repeat), float(norm_eps));
+        return {residual_out, next_post, next_comb, layer_input};
+    }
+    dsv4_mhc::finalize_pre_mix<<<T, 32, 0, stream()>>>(
+        fpm(partial), fp(hc_scale), fp(hc_base), fpm(next_post),
+        fpm(next_comb), H, float(rms_eps), float(pre_eps),
+        float(sinkhorn_eps), float(post_multiplier), int(sinkhorn_repeat));
+    if (norm_weight) {
+        TORCH_CHECK(norm_weight->is_cuda() && norm_weight->is_contiguous(),
+                    "norm_weight must be contiguous CUDA");
+        TORCH_CHECK(H == 4096 && norm_weight->scalar_type() == torch::kBFloat16 &&
+                    norm_weight->numel() == H,
+                    "fused DSV4 mHC RMSNorm expects a 4096-element bf16 weight");
+        dsv4_mhc::apply_pre_mix_rms_norm<dsv4_mhc::MIXES + 1>
+            <<<T, dsv4_mhc::THREADS, 0, stream()>>>(
+                fp(partial), bp(residual_out), bp(*norm_weight),
+                bpm(layer_input), float(norm_eps));
+    } else {
+        dsv4_mhc::apply_pre_mix<dsv4_mhc::MIXES + 1>
+            <<<dim3((H + dsv4_mhc::THREADS - 1) / dsv4_mhc::THREADS, T),
+                dsv4_mhc::THREADS, 0, stream()>>>(
+                fp(partial), bp(residual_out), bpm(layer_input), H);
+    }
+    return {residual_out, next_post, next_comb, layer_input};
+}
+
+static torch::Tensor py_dsv4_mhc_post(
+        torch::Tensor x, torch::Tensor residual, torch::Tensor post_mix,
+        torch::Tensor comb_mix) {
+    CK(x); CK(residual); CK(post_mix); CK(comb_mix);
+    const int T = residual.size(0), H = residual.size(2);
+    auto output = torch::empty_like(residual);
+    dsv4_mhc::post<<<dim3((H + dsv4_mhc::THREADS - 1) / dsv4_mhc::THREADS, T),
+                          dsv4_mhc::THREADS, 0, stream()>>>(
+        bp(x), bp(residual), fp(post_mix), fp(comb_mix), bpm(output), H);
+    return output;
+}
+
+static torch::Tensor py_dsv4_hc_head(
+        torch::Tensor residual, torch::Tensor fn, torch::Tensor hc_scale,
+        torch::Tensor hc_base, double rms_eps, double hc_eps) {
+    CK(residual); CK(fn); CK(hc_scale); CK(hc_base);
+    TORCH_CHECK(fn.scalar_type() == torch::kFloat32 ||
+                fn.scalar_type() == torch::kFloat16,
+                "HC head fn must be float16 or float32");
+    const int T = residual.size(0), H = residual.size(2);
+    TORCH_CHECK(residual.size(1) == dsv4_mhc::HC && fn.size(0) == dsv4_mhc::HC,
+                "DSV4 HC head expects hc_mult=4");
+    auto partial = torch::empty(
+        {T, dsv4_mhc::SPLITS, dsv4_mhc::HC + 1},
+        fn.options().dtype(torch::kFloat32));
+    auto output = torch::empty({T, H}, residual.options());
+    launch_dsv4_mhc_partials<dsv4_mhc::HC, false>(
+        nullptr, bp(residual), nullptr, nullptr, fn, nullptr, fpm(partial), H,
+        dim3(dsv4_mhc::SPLITS, T));
+    dsv4_mhc::finalize_head_mix<<<T, 32, 0, stream()>>>(
+        fpm(partial), fp(hc_scale), fp(hc_base), H, float(rms_eps), float(hc_eps));
+    dsv4_mhc::apply_pre_mix<dsv4_mhc::HC + 1>
+        <<<dim3((H + dsv4_mhc::THREADS - 1) / dsv4_mhc::THREADS, T),
+            dsv4_mhc::THREADS, 0, stream()>>>(
+            fp(partial), bp(residual), bpm(output), H);
+    return output;
+}
+
+// ---- KDA single-token decode recurrence (ported from SlimServe, env-gated diagnostic there) ----
+static torch::Tensor py_kda_decode(torch::Tensor mixed_qkv, torch::Tensor raw_g,
+        torch::Tensor raw_beta, torch::Tensor A_log, torch::Tensor dt_bias,
+        torch::Tensor state, torch::Tensor state_indices, double scale,
+        double lower_bound, bool use_lower_bound) {
+    TORCH_CHECK(mixed_qkv.is_cuda() && mixed_qkv.dim() == 2 && mixed_qkv.stride(1) == 1 &&
+                mixed_qkv.scalar_type() == torch::kBFloat16, "mixed_qkv: [N, C] bf16, unit inner stride");
+    TORCH_CHECK(state.is_cuda() && state.dim() == 4 && state.scalar_type() == torch::kFloat &&
+                state.stride(3) == 1, "state: [cache, H, V, K] fp32");
+    const int N = mixed_qkv.size(0), H = state.size(1), V = state.size(2), K = state.size(3);
+    TORCH_CHECK(K == 128 && V == 128, "kda_decode: K == V == 128 only");
+    TORCH_CHECK(state.stride(1) == int64_t(V) * K && state.stride(2) == K, "state head layout");
+    TORCH_CHECK(raw_g.dim() == 4 && raw_g.size(1) == N && raw_g.size(2) == H && raw_g.size(3) == K &&
+                raw_g.stride(3) == 1 && raw_g.stride(2) == K, "raw_g: [1, N, H, K]");
+    TORCH_CHECK(raw_beta.dim() == 3 && raw_beta.size(1) == N && raw_beta.size(2) == H &&
+                raw_beta.stride(2) == 1, "raw_beta: [1, N, H]");
+    TORCH_CHECK(A_log.numel() == H && A_log.is_contiguous() && A_log.scalar_type() == torch::kFloat, "A_log");
+    TORCH_CHECK(dt_bias.numel() == int64_t(H) * K && dt_bias.is_contiguous() &&
+                dt_bias.scalar_type() == torch::kFloat, "dt_bias");
+    TORCH_CHECK(state_indices.dim() == 1 && state_indices.numel() == N &&
+                state_indices.scalar_type() == torch::kInt && state_indices.is_contiguous(), "state_indices");
+    TORCH_CHECK(mixed_qkv.size(1) >= 2 * H * K + H * V, "packed qkv width");
+    auto out = torch::empty({1, N, H, V}, mixed_qkv.options());
+    if (N == 0) return out;
+    tms::kda::kda_decode_kernel<128, 128><<<N * H, tms::kda::THREADS, 0, stream()>>>(
+        bp(mixed_qkv), bp(raw_g), bp(raw_beta), fp(A_log), fp(dt_bias), fpm(state),
+        state_indices.data_ptr<int>(), bpm(out), H, mixed_qkv.stride(0), raw_g.stride(1),
+        raw_beta.stride(1), state.stride(0), float(scale), float(lower_bound), use_lower_bound ? 1 : 0);
+    return out;
+}
+
 void init_serving(py::module_& m) {
+    m.def("dsv4_mhc_pre", &py_dsv4_mhc_pre,
+          py::arg("residual"), py::arg("fn"), py::arg("hc_scale"),
+          py::arg("hc_base"), py::arg("rms_eps"), py::arg("pre_eps"),
+          py::arg("sinkhorn_eps"), py::arg("post_multiplier"),
+          py::arg("sinkhorn_repeat"), py::arg("norm_weight") = c10::nullopt,
+          py::arg("norm_eps") = 0.0);
+    m.def("dsv4_mhc_fused_post_pre", &py_dsv4_mhc_fused_post_pre,
+          py::arg("x"), py::arg("residual"), py::arg("post_mix"),
+          py::arg("comb_mix"), py::arg("fn"), py::arg("hc_scale"),
+          py::arg("hc_base"), py::arg("rms_eps"), py::arg("pre_eps"),
+          py::arg("sinkhorn_eps"), py::arg("post_multiplier"),
+          py::arg("sinkhorn_repeat"), py::arg("norm_weight") = c10::nullopt,
+          py::arg("norm_eps") = 0.0);
+    m.def("dsv4_mhc_post", &py_dsv4_mhc_post,
+          py::arg("x"), py::arg("residual"), py::arg("post_mix"),
+          py::arg("comb_mix"));
+    m.def("dsv4_hc_head", &py_dsv4_hc_head,
+          py::arg("residual"), py::arg("fn"), py::arg("hc_scale"),
+          py::arg("hc_base"), py::arg("rms_eps"), py::arg("hc_eps"));
+    m.def("kda_decode", &py_kda_decode, py::arg("mixed_qkv"), py::arg("raw_g"),
+          py::arg("raw_beta"), py::arg("A_log"), py::arg("dt_bias"), py::arg("state"),
+          py::arg("state_indices"), py::arg("scale"), py::arg("lower_bound"),
+          py::arg("use_lower_bound"));
     m.def("mla_kv_insert", &py_mla_kv_insert, py::arg("kv_c"), py::arg("k_pe"), py::arg("cos"),
           py::arg("sin"), py::arg("positions"), py::arg("slot_mapping"), py::arg("kv_cache"),
           py::arg("block_size"), py::arg("norm_mode") = 0, py::arg("eps") = 1e-6,

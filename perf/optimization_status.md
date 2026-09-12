@@ -326,11 +326,12 @@ Raw results: SlimServe perf/results/2026-09-12/kernel-bench/
 {baseline,fp8-lane,fp8-pair}.json. (tools/perf_notebook.py is absent in
 this checkout; index not regenerated.)
 
-## 2026-09-12: mHC transition kernels (GLM-5.3 TP4 x DP2 decode) — LANDED in SlimServe, PORT OPEN
+## 2026-09-12: mHC transition kernels (GLM-5.3 TP4 x DP2 decode) — LANDED in SlimServe, PORTED
 
-Status: landed (SlimServe csrc/quixicore/serving/mhc_ampere.cuh); the mHC
-family (`tms::dsv4_mhc`) is not yet vendored in this repository, so the
-port is an open item.
+Status: landed (SlimServe csrc/quixicore/serving/mhc_ampere.cuh) and ported
+here the same day: kernels/serving/mhc_ampere.cuh (verbatim copy) with the
+host launches and the dsv4_mhc_pre / dsv4_mhc_fused_post_pre / dsv4_mhc_post
+/ dsv4_hc_head bindings in kernels/tm_cuda/tm_cuda_serving.cu.
 Baseline (A100, c32 decode step of the record, one worker trace): mHC
 partials 7.0 ms/step (89 launches at 78 us), pre-mix norm 1.06 ms,
 finalize 0.72 ms - 18% of the 49 ms step.
@@ -342,9 +343,50 @@ Experiments (op-level, T tokens, us per fused_post_pre):
 | fn as half instead of fp32 | 35.0 | 43.1 | 58.4 | 95.9 | REJECTED (slower) |
 | fused finalize + norm, 1024-thread block | 31.7 | 41.7 | 61.2 | 108.4 | LANDED (bit-identical) |
 | 8-token split-output partials | 36.2 | 52.2 | 68.5 | 101.0 | REJECTED below T=128 |
-Decision: the transition op at T=32 went 98 -> 42 us; at 90 sites per
-step that is ~5 ms of a 49 ms step. Remaining: the first-layer pre and
+| partials_batched_ws: warp-split (each warp streams 3 of 24 fn rows, values staged once in smem, 64 regs, 4 blocks/SM) | 8.1 (T=4) | 13.6 | 19.9 | 33.4 | LANDED (default; residual bit-exact, coefficients 5e-7) |
+| transpose-reduce epilogue (31 shuffles instead of 125) | - | 63.9 | - | 214 | REJECTED (128 accumulators spilled, 2x slower) |
+| warp-split with 8-token tiles | - | 18.5 | 23.0 | 38.6 | REJECTED (half the blocks, same per-block latency) |
+| warp-split, all 48 fn loads before the FMAs (79 regs) | - | 14.7 | 21.5 | 37.1 | REJECTED (3 blocks/SM) |
+Decision: the transition op at T=32 went 98 -> 42 -> 22 us (partials 31 ->
+13.6 us) and at T=128 (32 requests x 4 draft rows per replica) partials went
+98 -> 33 us. Serving A/B on the fp8 DP2 record (two repeats per arm): c64
+1316 vs 1167 tok/s (+12.8%), c16 +4%; record re-measured at c1 127.1 / c8
+497.0 / c16 843.9 / c32 1023.3 / c64 1320.8 tok/s. Per-kernel accounting:
+the batched kernel held TT x 24 accumulators + 24 fn values per thread (164
+registers, one block per SM) so its L2 fn loads ran latency-bound; ablating
+either load stream from the warp-split kernel saves only 4-6 us at T=128,
+the rest is per-block fixed latency (two syncs, staged coefficients, 12
+warp sums) times 2.4 waves. Remaining: the first-layer pre and
 the taps/post ops are unchanged; the SIMT Triton path (T <= 64 at the
 MoE site) was not touched.
 Raw results: SlimServe perf/results/2026-09-12/kernel-bench/ and the
 2026-09-12 notebook entries.
+
+## 2026-09-12: KDA decode recurrence, CUDA port (GLM-5.3 KDA layers) — DIAGNOSTIC, PORTED
+
+Status: ported (kernels/serving/kda_decode_kernels.cuh, `tms::kda::
+kda_decode_kernel<128,128>`, binding `kda_decode`); env-gated in SlimServe
+(KDA_DECODE_CUDA=1), not on the record's serving path.
+Current implementation: one block of 8 warps per (token, head); each warp
+owns one state row at a time with 128-bit lane loads; q/k/v/gate staged in
+shared memory; L2 norms, sigmoid beta, decay, delta update and output dot
+per row with warp shuffles - the exact math of the Triton packed-decode
+kernel.
+Correctness: SlimServe tests/kernels/test_kda_decode_cuda.py 8/8 (outputs
+rtol 2e-3, state 1e-4 vs Triton).
+Baseline / experiments (A100, H=16, K=V=128 fp32 state, us per launch):
+| N | Triton packed decode | CUDA |
+|---|---|---|
+| 16 | 28.0 | 18.9 |
+| 32 | 45.9 | 46.7 |
+| 64 | 92.9 | 93.5 |
+Decision: the Triton kernel already moves the state at ~1.4 TB/s from N=32
+up, so there is no serving lever at the record's batch; kept as a
+diagnostic. The speculative path's cost (104-115 us per layer at 32
+requests x 4 rows) is 1 read + 4 per-row state stores = 5x the decode
+traffic, i.e. also at bandwidth; the only lever there is a deferred-commit
+scheme (store once, replay accepted rows next step), which is a runner
+state-machine change recorded in the SlimServe notebook, not a kernel.
+Open: the skinny bf16 split-K GEMM for M <= 128 (SlimServe csrc/quixicore/
+serving/skinny_gemm_ampere.cuh) is correct but load-bound at 0.65 TB/s
+against cuBLAS's 0.96 and is parked, not ported.
