@@ -297,3 +297,31 @@ the accumulator); (2) Triton fp8 decode via 16-bit assembly to fp16 with
 the scale folded into q. Decision and serving A/B follow the bench.
 Open questions: whether fp8 can beat bf16 at decode batch (the TC kernel
 is not byte-bound at B<=32) or only match it (capacity win at no cost).
+
+## 2026-09-12: Sparse MLA decode, fp8 NoPE latent — LANDED (native), REJECTED (Triton variants)
+
+Status: landed (native kernel); TC variants rejected.
+Current implementation: `mla_decode_fp8_v<true, PART, 512, 512, 512, 1>`
+with the new VECFP8L lane-parallel row path (kernels/serving/
+mla_kernels.cuh, ported from SlimServe 1a524cb69): 32 indices per round,
+one 16-byte load per lane per row, 4 rows in flight, e4m3 pairs decoded
+as fp16 bit patterns ((b&0x7F)<<7 | (b&0x80)<<8) x 2^8 (exact incl.
+subnormals), per-tensor scale folded into q and applied once to the
+accumulator. Entry point `mla_decode_fp8_sparse_nope` (tm_cuda_serving.cu).
+Correctness: SlimServe tests/kernels/test_quixicore_sparse_mla_bf16.py -k
+fp8 and tests/glm5_next/test_sparse_tc_candidate.py -k fp8: 24/24.
+Experiments (A100 SM80, B=32 rows x 16 heads x top-2048, us per launch):
+| variant | before | after | verdict |
+|---|---|---|---|
+| native fp8, lane-parallel path + e4m3_decode per element | 1206 | 982 | kept (intermediate) |
+| native fp8, lane-parallel + half2 pair decode | 982 | 613 (bf16: 602) | LANDED |
+| Triton TC fp8, 16-bit assembly to fp16 | 361 | 1655 | REJECTED (int16 codegen) |
+| Triton TC fp8, scale folded into q / accumulator | 361 | 632 | REJECTED (codegen) |
+Decision: fp8 storage is free at decode on the native kernel; the Triton
+tensor-core fp8 path stays 2.5x its bf16 sibling, so a CUDA tensor-core
+fp8 kernel is the remaining item if fp8 KV must match bf16 throughput at
+c<=32 (the TC kernel is not byte-bound there: 0.44 TB/s).
+Open questions: none for the native path; TC fp8 as above.
+Raw results: SlimServe perf/results/2026-09-12/kernel-bench/
+{baseline,fp8-lane,fp8-pair}.json. (tools/perf_notebook.py is absent in
+this checkout; index not regenerated.)
