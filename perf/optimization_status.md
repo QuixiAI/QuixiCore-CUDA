@@ -390,3 +390,29 @@ state-machine change recorded in the SlimServe notebook, not a kernel.
 Open: the skinny bf16 split-K GEMM for M <= 128 (SlimServe csrc/quixicore/
 serving/skinny_gemm_ampere.cuh) is correct but load-bound at 0.65 TB/s
 against cuBLAS's 0.96 and is parked, not ported.
+
+## 2026-09-13: sparse NoPE-MLA prefill attention (GLM-5.3 TP4 x DP2) — LANDED in SlimServe, PORTED
+
+Status: landed and on the SlimServe record (flag glm5_next_sparse_prefill);
+ported here as kernels/serving/mla_sparse_prefill_kernels.cuh with the
+launch/binding in kernels/tm_cuda/tm_cuda_serving.cu (mla_sparse_prefill_fp8).
+Current implementation: CTA per 4 consecutive queries x 16 heads (64 rows);
+prep kernel compacts each query's pool-contiguous index list to pool runs,
+sorts the (physical pool, query, token-bits) keys of the group (bitonic,
+smem), block-scans the union list and per-(query, pool) 4-bit masks; the
+attention kernel dequantizes 8-pool (32-key) tiles e4m3 -> bf16 into smem
+once, Q.K^T through ldmatrix with the warp pair splitting the 512 dims and
+exchanging partial scores, FA2 online softmax with the pool mask, P.V via
+ldmatrix.trans; kv_scale folded into q and applied to O.
+References: SlimServe csrc/quixicore/serving/mla_sparse_prefill_kernels.cuh;
+reference oracle tests/kernels/test_quixicore_sparse_mla_bf16.py::_reference.
+Correctness: SlimServe tests/kernels/test_quixicore_sparse_prefill.py 5/5
+(< 5e-3 vs the torch reference); canaries, 845-turn WildChat leg 135/135
+recall. Duplicate indices count once (the decode kernel counts them twice).
+Baseline: prefill chunks ran the per-token decode kernel mla_decode_fp8_v,
+39% of prefill time (12.4 ms per launch at ~2.5K-token chunks).
+Experiments (A100): microbench vs the decode kernel on non-overlapping
+random pools 1.7-2.0x; prefill profile window 6870 -> 5009 ms (-27%),
+attention 2597 -> 392 (+317 prep, then 0.2-0.6 ms after run compaction);
+serving sustained load c64 1417 -> 1508, c128 1674 -> 1864 output tok/s.
+Decision: kept, default on.

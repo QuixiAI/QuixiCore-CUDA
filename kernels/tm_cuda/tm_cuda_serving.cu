@@ -18,6 +18,7 @@
 #include "turboquant_kernels.cuh"
 #include "mhc_ampere.cuh"
 #include "kda_decode_kernels.cuh"
+#include "mla_sparse_prefill_kernels.cuh"
 #include <cstdlib>
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
@@ -1597,7 +1598,61 @@ static torch::Tensor py_kda_decode(torch::Tensor mixed_qkv, torch::Tensor raw_g,
     return out;
 }
 
+// ---- Sparse NoPE-MLA prefill attention (ported from SlimServe, 2026-09-13) ----
+// Sparse NoPE-MLA prefill attention over the fp8 latent (see mla_sparse_prefill_kernels.cuh).
+template <int NLIST>
+static void launch_sparse_prefill_prep(const int* idx, const int* tlen, const int* bt, int T, int W, int maxb,
+                                       int block_size, int* pools, int* qmask, int* counts, int G) {
+    static bool attr_set = false;
+    if (!attr_set) {
+        cudaFuncSetAttribute(tms::sparse_prefill::sparse_prefill_prep_kernel<NLIST>,
+                             cudaFuncAttributeMaxDynamicSharedMemorySize, NLIST * 4);
+        attr_set = true;
+    }
+    tms::sparse_prefill::sparse_prefill_prep_kernel<NLIST><<<G, tms::sparse_prefill::THREADS, NLIST * 4, stream()>>>(
+        idx, tlen, bt, T, W, maxb, block_size, pools, qmask, counts);
+}
+static torch::Tensor py_mla_sparse_prefill_fp8(torch::Tensor q, torch::Tensor data, torch::Tensor bt,
+                                               torch::Tensor indices, torch::Tensor topk_length,
+                                               int64_t block_size, double scale, double kv_scale,
+                                               int64_t page_stride_bytes) {
+    CK(q); TORCH_CHECK(data.is_cuda() && data.stride(-1) == 1, "data must be a CUDA tensor with unit inner stride");
+    if (page_stride_bytes <= 0) page_stride_bytes = block_size * 512;
+    CK(bt); CK(indices); CK(topk_length);
+    TORCH_CHECK(q.dim() == 3 && q.size(2) == 512 && q.size(1) == 16, "q [T, 16, 512] bf16 (TP4 head count)");
+    TORCH_CHECK(block_size % 4 == 0, "block_size % 4 == 0");
+    using namespace tms::sparse_prefill;
+    const int T = q.size(0), H = q.size(1), W = indices.size(1), maxb = bt.size(1);
+    const int G = (T + GQ - 1) / GQ;
+    auto pools = torch::empty({G, MAXU}, indices.options());
+    auto qmask = torch::zeros({G, GQ, MAXU}, indices.options());
+    auto counts = torch::empty({G}, indices.options());
+    const int need = GQ * W;
+    TORCH_CHECK(need <= 16384 && W <= 4 * (MAXU / GQ), "index width too large for the prep kernel");
+    if (need <= 8192)
+        launch_sparse_prefill_prep<8192>(indices.data_ptr<int>(), topk_length.data_ptr<int>(), bt.data_ptr<int>(), T, W, maxb,
+                                         int(block_size), pools.data_ptr<int>(), qmask.data_ptr<int>(), counts.data_ptr<int>(), G);
+    else
+        launch_sparse_prefill_prep<16384>(indices.data_ptr<int>(), topk_length.data_ptr<int>(), bt.data_ptr<int>(), T, W, maxb,
+                                          int(block_size), pools.data_ptr<int>(), qmask.data_ptr<int>(), counts.data_ptr<int>(), G);
+    auto out = torch::empty({T, H, 512}, q.options());
+    static bool attr_set = false;
+    if (!attr_set) {
+        cudaFuncSetAttribute(sparse_prefill_attn_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SMEM_TOTAL);
+        attr_set = true;
+    }
+    const float q_scale = float(scale) * float(kv_scale) * 1.4426950408889634f;
+    sparse_prefill_attn_kernel<<<G, THREADS, SMEM_TOTAL, stream()>>>(
+        bp(q), data.data_ptr<uint8_t>(), pools.data_ptr<int>(), qmask.data_ptr<int>(), counts.data_ptr<int>(),
+        bpm(out), T, H, q_scale, float(kv_scale), int(block_size), page_stride_bytes);
+    return out;
+}
+
 void init_serving(py::module_& m) {
+    m.def("mla_sparse_prefill_fp8", &py_mla_sparse_prefill_fp8, py::arg("q"), py::arg("data"), py::arg("bt"), py::arg("indices"),
+          py::arg("topk_length"), py::arg("block_size"), py::arg("scale"), py::arg("kv_scale"),
+          py::arg("page_stride_bytes") = 0,
+          "Sparse NoPE-MLA prefill attention (groups of 4 queries over their pool union, fp8 latent)");
     m.def("dsv4_mhc_pre", &py_dsv4_mhc_pre,
           py::arg("residual"), py::arg("fn"), py::arg("hc_scale"),
           py::arg("hc_base"), py::arg("rms_eps"), py::arg("pre_eps"),
